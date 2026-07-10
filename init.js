@@ -1,3 +1,2134 @@
+//  auto-skip.js
+!function(){"use strict";if(!window.__skipIntroLoaded){window.__skipIntroLoaded=!0,function(){try{var t=Lampa.Storage.get("plugins","[]");if("string"==typeof t&&(t=JSON.parse(t)),Array.isArray(t)){var e=!1;t.forEach(function(t){t.url&&-1!==t.url.indexOf("lampa-auto-skip")&&(t.name&&"Skip Intro/Outro"===t.name||(t.name="Skip Intro/Outro",e=!0),t.author&&"@vahagn"===t.author||(t.author="@vahagn",e=!0))}),e&&Lampa.Storage.set("plugins",JSON.stringify(t))}}catch(t){}}();var t="https://api.introdb.app",e=5e3,n=360,i={intro:"Пропустить заставку",recap:"Пропустить рекап",credits:"Пропустить титры",preview:"Пропустить превью"},r=["intro","recap","credits","preview"],o={init:function(){Lampa.SettingsApi.addComponent({component:"skip_intro",name:"Пропуск заставок",icon:'<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>'}),Lampa.SettingsApi.addParam({component:"skip_intro",param:{name:"skip_intro_enabled",type:"trigger",default:!0},field:{name:"Включить плагин",description:"Показывать кнопку пропуска заставок и титров"}}),Lampa.SettingsApi.addParam({component:"skip_intro",param:{name:"skip_intro_auto",type:"trigger",default:!1},field:{name:"Всегда автопропуск",description:"Всегда перематывать без кнопки (для всех сериалов)"}}),Lampa.SettingsApi.addParam({component:"skip_intro",param:{name:"skip_intro_detect",type:"trigger",default:!0},field:{name:"Умное обнаружение",description:"Определять заставку по субтитрам и звуку, если нет данных в базе"}}),Lampa.SettingsApi.addParam({component:"skip_intro",param:{name:"skip_intro_type_intro",type:"trigger",default:!0},field:{name:"Пропускать заставку (intro)"}}),Lampa.SettingsApi.addParam({component:"skip_intro",param:{name:"skip_intro_type_recap",type:"trigger",default:!0},field:{name:"Пропускать рекап (recap)"}}),Lampa.SettingsApi.addParam({component:"skip_intro",param:{name:"skip_intro_type_credits",type:"trigger",default:!0},field:{name:"Пропускать титры (credits)"}}),Lampa.SettingsApi.addParam({component:"skip_intro",param:{name:"skip_intro_type_preview",type:"trigger",default:!1},field:{name:"Пропускать превью (preview)"}}),Lampa.SettingsApi.addParam({component:"skip_intro",param:{name:"skip_intro_key_skip",type:"select",values:{enter:"Enter / OK",space:"Пробел",red:"Красная кнопка (403)",green:"Зелёная кнопка (404)",yellow:"Жёлтая кнопка (405)",blue:"Синяя кнопка (406)"},default:"enter"},field:{name:"Кнопка «Пропустить»",description:"Какая кнопка на пульте пропускает сегмент"}}),Lampa.SettingsApi.addParam({component:"skip_intro",param:{name:"skip_intro_key_cancel",type:"select",values:{back:"Назад (Back)",red:"Красная кнопка (403)",green:"Зелёная кнопка (404)",yellow:"Жёлтая кнопка (405)",blue:"Синяя кнопка (406)"},default:"back"},field:{name:"Кнопка «Отменить»",description:"Какая кнопка на пульте отменяет автопропуск"}})},isEnabled:function(){return!1!==Lampa.Storage.field("skip_intro_enabled")},isAutoSkip:function(){return!0===Lampa.Storage.field("skip_intro_auto")},isDetectEnabled:function(){return!1!==Lampa.Storage.field("skip_intro_detect")},isTypeEnabled:function(t){return!1!==Lampa.Storage.field("skip_intro_type_"+t)},_keyMap:{enter:[13],space:[32],back:[8,27,10009,461,4],red:[403],green:[404],yellow:[405],blue:[406]},getSkipKeys:function(){var t=Lampa.Storage.field("skip_intro_key_skip")||"enter";return this._keyMap[t]||this._keyMap.enter},getCancelKeys:function(){var t=Lampa.Storage.field("skip_intro_key_cancel")||"back";return this._keyMap[t]||this._keyMap.back}},a={_storageKey:"skip_intro_smart",_getAll:function(){try{var t=Lampa.Storage.get(this._storageKey,"{}");return"string"==typeof t&&(t=JSON.parse(t)),t||{}}catch(t){return{}}},_saveAll:function(t){try{Lampa.Storage.set(this._storageKey,JSON.stringify(t))}catch(t){}},hasSkipped:function(t,e){return!0===this._getAll()[t+"_"+e]},rememberSkip:function(t,e){var n=this._getAll();n[t+"_"+e]=!0,this._saveAll(n),console.log("[SkipIntro] Smart skip remembered for",t,e)},forgetSkip:function(t,e){var n=this._getAll();delete n[t+"_"+e],this._saveAll(n),console.log("[SkipIntro] Smart skip forgotten for",t,e)}},s={_key:function(t,e,n){return"skip_"+t+"_s"+e+"_e"+n},get:function(t,e,n){try{var i=localStorage.getItem(this._key(t,e,n));if(!i)return null;var r=JSON.parse(i);return r&&r._ts?Date.now()-r._ts>6048e5?(localStorage.removeItem(this._key(t,e,n)),null):r.segments||[]:null}catch(t){return null}},set:function(t,e,n,i){try{localStorage.setItem(this._key(t,e,n),JSON.stringify({segments:i,_ts:Date.now()}))}catch(t){}}},l={_storageKey:"skip_intro_detected",_getAll:function(){try{var t=Lampa.Storage.get(this._storageKey,"{}");return"string"==typeof t&&(t=JSON.parse(t)),t||{}}catch(t){return{}}},_saveAll:function(t){try{Lampa.Storage.set(this._storageKey,JSON.stringify(t))}catch(t){}},_ttl:2592e6,get:function(t,e,n){var i=this._getAll(),r=i[t+"_s"+e+"_e"+n];return r?r._ts&&Date.now()-r._ts>this._ttl?(delete i[t+"_s"+e+"_e"+n],this._saveAll(i),null):r.segments||null:null},set:function(t,e,n,i){var r=this._getAll();r[t+"_s"+e+"_e"+n]={segments:i,_ts:Date.now()},this._saveAll(r),console.log("[SkipIntro] Detected segments cached for TMDB:"+t+" S"+e+"E"+n+":",i.length,"segments")}},u={detect:function(t){var e=t.duration||0;return new Promise(function(n){try{var i=t.customSubs;if(!i||!i.length){var r=t.textTracks;if(r&&r.length)for(var o=0;o<r.length;o++)if(r[o].cues&&r[o].cues.length>5)return n(u._analyzeTextTrack(r[o],e));return n([])}for(var a=null,s=0;s<i.length;s++)if(i[s].url){a=i[s];break}if(!a||!a.url)return n([]);var l=new XMLHttpRequest;l.open("GET",a.url,!0),l.responseType="text",l.onload=function(){l.status>=200&&l.status<300&&l.responseText?n(u._analyzeSrtText(l.responseText,e)):n([])},l.onerror=function(){n([])},l.timeout=8e3,l.ontimeout=function(){n([])},l.send()}catch(t){console.log("[SkipIntro] SubtitleDetector error:",t),n([])}})},_analyzeTextTrack:function(t,e){for(var n=[],i=0;i<t.cues.length;i++)n.push({start:t.cues[i].startTime,end:t.cues[i].endTime});return this._findSegments(n,e)},_parseSrtTime:function(t){var e=t.match(/(\d+):(\d{2}):(\d{2})[.,](\d{3})/);return e?3600*parseInt(e[1])+60*parseInt(e[2])+parseInt(e[3])+parseInt(e[4])/1e3:0},_analyzeSrtText:function(t,e){t=t.replace(/\r\n/g,"\n").replace(/\r/g,"\n");for(var n,i=[],r=/(\d{1,2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[.,]\d{3})/g;null!==(n=r.exec(t));){var o=this._parseSrtTime(n[1]),a=this._parseSrtTime(n[2]);a>o&&i.push({start:o,end:a})}return i.length<5?[]:this._findSegments(i,e)},_findSegments:function(t,e){t.sort(function(t,e){return t.start-e.start});var i=[],r=null,o=0;t.length>0&&t[0].start>=15&&t[0].start<=150&&(o=t[0].start,r={type:"intro",start:0,end:Math.round(t[0].start)});for(var a=0;a<t.length-1&&!(t[a].end>n);a++){var s=t[a].end,l=t[a+1].start,u=l-s;u>=15&&u<=150&&s<n&&u>o&&(o=u,r={type:"intro",start:Math.round(s),end:Math.round(l)})}if(r&&(console.log("[SkipIntro] Subtitle intro detected:",r.start,"→",r.end,"("+Math.round(r.end-r.start)+"s)"),i.push(r)),e>600&&t.length>0){var c=t[t.length-1],d=e-c.end;if(d>=30){var p=Math.round(c.end),_=Math.round(e);console.log("[SkipIntro] Subtitle credits detected:",p,"→",_,"("+Math.round(d)+"s gap after last subtitle)"),i.push({type:"credits",start:p,end:_})}for(var h=Math.max(0,e-600),m=null,f=0,g=0;g<t.length-1;g++)if(!(t[g].end<h)){var y=t[g].end,v=t[g+1].start,k=v-y;k>=30&&k>f&&(f=k,m={type:"credits",start:Math.round(y),end:Math.round(v)})}if(m&&f>d){for(var b=i.length-1;b>=0;b--)if("credits"===i[b].type){i.splice(b,1);break}console.log("[SkipIntro] Subtitle credits gap detected:",m.start,"→",m.end,"("+f+"s)"),i.push(m)}}return i}},c={_context:null,_analyser:null,_source:null,_connected:!1,_sampleTimer:null,_timeoutTimer:null,_stopSampling:function(){this._sampleTimer&&(clearInterval(this._sampleTimer),this._sampleTimer=null),this._timeoutTimer&&(clearTimeout(this._timeoutTimer),this._timeoutTimer=null)},detect:function(t){var e=this;return e._stopSampling(),new Promise(function(i){var r=!1;function o(t){r||(r=!0,i(t))}try{if(!window.AudioContext&&!window.webkitAudioContext)return console.log("[SkipIntro] Web Audio API not available"),o(null);if(!e._context||"closed"===e._context.state)try{e._context=new(window.AudioContext||window.webkitAudioContext)}catch(t){return console.log("[SkipIntro] AudioDetector: cannot create AudioContext:",t.message),o(null)}if(!e._connected||!e._analyser){e._source=null,e._analyser=null,e._connected=!1;try{e._source=e._context.createMediaElementSource(t),e._analyser=e._context.createAnalyser(),e._analyser.fftSize=2048,e._source.connect(e._analyser),e._analyser.connect(e._context.destination),e._connected=!0}catch(t){return console.log("[SkipIntro] AudioDetector connect error:",t.message),o(null)}}if(!e._analyser)return o(null);var a=[],s=new Uint8Array(e._analyser.frequencyBinCount),l=t.currentTime;e._sampleTimer=setInterval(function(){if(!e._analyser)return e._stopSampling(),void o(a.length>10?e._analyzeEnergy(a):null);try{var i=t.currentTime;if(i-l>n||i>420)return e._stopSampling(),void o(e._analyzeEnergy(a));e._analyser.getByteFrequencyData(s);for(var r=0,u=0;u<s.length;u++)r+=s[u];a.push({time:i,energy:r/s.length})}catch(t){e._stopSampling(),o(null)}},500),e._timeoutTimer=setTimeout(function(){e._stopSampling(),o(a.length>10?e._analyzeEnergy(a):null)},37e4)}catch(t){console.log("[SkipIntro] AudioDetector error:",t),o(null)}})},_analyzeEnergy:function(t){if(t.length<20)return null;for(var e=[],i=2;i<t.length-2;i++){var r=(t[i-2].energy+t[i-1].energy+t[i].energy+t[i+1].energy+t[i+2].energy)/5;e.push({time:t[i].time,energy:r})}if(e.length<10)return null;var o=e.map(function(t){return t.energy});o.sort(function(t,e){return t-e});for(var a=o[Math.floor(o.length/2)],s=1.3*a,l=.8*a,u=null,c=null,d=0,p=!1,_=0;_<e.length;_++){var h=e[_];if(h.time>n)break;if(h.energy>s)p||(p=!0,u=h.time,d=0),d++;else if(p&&h.energy<l){var m=h.time-u;if(m>=15&&m<=150&&d>=10){c=h.time;break}p=!1,u=null,d=0}}return null!=u&&null!=c?(console.log("[SkipIntro] Audio energy intro detected:",Math.round(u),"→",Math.round(c)),{type:"intro",start:Math.round(u),end:Math.round(c)}):null},destroy:function(){this._stopSampling();try{this._source&&(this._source.disconnect(),this._source=null),this._analyser&&(this._analyser.disconnect(),this._analyser=null),this._context&&(this._context.close(),this._context=null),this._connected=!1}catch(t){}}},d={_fetchWithTimeout:function(t,e){return new Promise(function(n,i){var r=!1,o=setTimeout(function(){r=!0,i(new Error("timeout"))},e),a=new XMLHttpRequest;a.open("GET",t,!0),a.setRequestHeader("Accept","application/json"),a.onreadystatechange=function(){if(4===a.readyState){if(clearTimeout(o),r)return;if(a.status>=200&&a.status<300)try{n(JSON.parse(a.responseText))}catch(t){i(t)}else 204===a.status||404===a.status?n(null):i(new Error("HTTP "+a.status))}},a.onerror=function(){clearTimeout(o),i(new Error("network"))},a.send()})},_normalizeTheIntroDB:function(t){var e=[];return t?(r.forEach(function(n){var i=t[n];Array.isArray(i)&&i.forEach(function(t){var i=null!=t.start_ms?t.start_ms/1e3:t.start||0,r=null!=t.end_ms?t.end_ms/1e3:t.end||0;r>i&&e.push({type:n,start:i,end:r})})}),e):e},_normalizeIntroDB:function(t,e){var n=[];return t&&null!=t.start&&null!=t.end&&t.end>t.start&&n.push({type:"intro",start:t.start,end:t.end}),e&&null!=e.start&&null!=e.end&&e.end>e.start&&n.push({type:"credits",start:e.start,end:e.end}),n},_normalizeIntroHater:function(t){var e=[];return t&&Array.isArray(t)?(t.forEach(function(t){if(null!=t.start&&null!=t.end&&t.end>t.start){var n="intro",i=(t.label||"").toLowerCase();-1!==i.indexOf("credit")||"ed"===i?n="credits":-1!==i.indexOf("recap")?n="recap":-1!==i.indexOf("preview")&&(n="preview"),e.push({type:n,start:Math.round(t.start),end:Math.round(t.end)})}}),e):e},fetchTheIntroDB:function(t,n,i){var r="https://api.theintrodb.org/v2/media?tmdb_id="+t+"&season="+n+"&episode="+i,o=this;return this._fetchWithTimeout(r,e).then(function(t){return o._normalizeTheIntroDB(t)})},fetchIntroHater:function(t,n,i){if(!t)return Promise.resolve([]);var r="https://introhater.com/api/segments/"+t+":"+n+":"+i,o=this;return this._fetchWithTimeout(r,e).then(function(t){return o._normalizeIntroHater(t)})},fetchIntroDB:function(n,i,r,o){var a=i?"imdb="+i:"tmdb="+n,s=this,l=t+"/get_intros?"+a+"&season="+r+"&episode="+o,u=t+"/get_credits?"+a+"&season="+r+"&episode="+o;return Promise.all([s._fetchWithTimeout(l,e).catch(function(){return null}),s._fetchWithTimeout(u,e).catch(function(){return null})]).then(function(t){return s._normalizeIntroDB(t[0],t[1])})},load:function(t,e,n,i){var r=s.get(t,n,i);if(null!==r)return Promise.resolve(r);var o=this,a=function(e){return s.set(t,n,i,e||[]),e||[]};return this.fetchTheIntroDB(t,n,i).then(function(r){return r&&r.length>0?a(r):o.fetchIntroDB(t,e,n,i).then(function(t){return t&&t.length>0?a(t):o.fetchIntroHater(e,n,i).then(a)})}).catch(function(){return o.fetchIntroDB(t,e,n,i).then(function(t){return t&&t.length>0?a(t):o.fetchIntroHater(e,n,i).then(a)}).catch(function(){return o.fetchIntroHater(e,n,i).then(a).catch(function(){return[]})})})}},p={_button:null,_visible:!1,_fadeTimer:null,_countdownInterval:null,_progressBar:null,_mode:null,_injectCSS:function(){if(!document.getElementById("skip-intro-css")){var t=document.createElement("style");t.id="skip-intro-css",t.textContent=".skip-intro-button{position:absolute;right:40px;bottom:180px;padding:0;background:rgba(0,0,0,.65);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1.5px solid rgba(255,255,255,.2);border-radius:12px;color:#fff;font-size:1em;cursor:pointer;z-index:9999;transition:opacity .4s ease,transform .4s ease,border-color .3s ease;opacity:0;pointer-events:none;transform:translateX(20px);outline:none;font-family:inherit;line-height:1.4;white-space:nowrap;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 4px 24px rgba(0,0,0,.4)}.skip-intro-button.visible{opacity:1;pointer-events:auto;transform:translateX(0)}.skip-intro-button:focus,.skip-intro-button:hover{border-color:rgba(255,255,255,.6);background:rgba(0,0,0,.8)}.skip-intro-content{display:flex;align-items:center;padding:14px 28px;gap:10px;position:relative;z-index:2}.skip-intro-content:hover{background:rgba(255,255,255,.08)}.skip-intro-icon{width:20px;height:20px;flex-shrink:0;opacity:.9}.skip-intro-progress{position:absolute;bottom:0;left:0;height:3px;background:linear-gradient(90deg,rgba(255,255,255,.9),rgba(200,200,255,.7));border-radius:0 0 10px 10px;transition:width .1s linear;z-index:3}.skip-intro-badge{font-size:.7em;opacity:.45;margin-left:6px;font-weight:300}.skip-intro-hint{font-size:.7em;opacity:.4;margin-left:8px;font-weight:300;border:1px solid rgba(255,255,255,.25);border-radius:4px;padding:1px 6px;letter-spacing:.5px}",document.head.appendChild(t)}},showNormal:function(t,e,n){if(this._clearCountdown(),this._injectCSS(),this._mode="normal",this._button)return this._updateLabel(t,n),this._button._onSkip=e,this._button._onCancel=null,this._button._withCancel=!1,this._button.classList.remove("countdown"),this._progressBar&&(this._progressBar.style.width="0%"),this._updateHint(!1),void(this._visible||this._setVisible(!0));this._createButton(t,e,!1,null,n)},showCountdown:function(t,e,n,i){if(this._clearCountdown(),this._injectCSS(),this._mode="countdown",this._button)return this._updateLabel(t,i),this._button._onSkip=e,this._button._onCancel=n,this._button._withCancel=!0,this._button.classList.add("countdown"),this._progressBar&&(this._progressBar.style.width="0%"),this._updateHint(!0),this._visible||this._setVisible(!0),void this._startCountdown(e);this._createButton(t,e,!0,n,i),this._startCountdown(e)},_updateHint:function(t){if(this._button&&this._button._hintEl)if(t){var e=Lampa.Storage.field("skip_intro_key_cancel")||"back";this._button._hintEl.textContent="нажмите "+({back:"Назад",red:"Красная",green:"Зелёная",yellow:"Жёлтая",blue:"Синяя"}[e]||"Назад")+" для отмены"}else{for(var n={13:"OK",29443:"OK",65385:"OK"},i=o.getSkipKeys(),r="OK",a=0;a<i.length;a++)if(n[i[a]]){r=n[i[a]];break}this._button._hintEl.textContent="нажмите "+r}},_createButton:function(t,e,n,i,r){var a=document.createElement("div");a.className="skip-intro-button"+(n?" countdown":""),a.setAttribute("tabindex","1");var s=document.createElement("div");s.className="skip-intro-content";var l=document.createElement("span");if(l.className="skip-intro-label",l.textContent=t,s.appendChild(l),r){var u=document.createElement("span");u.className="skip-intro-badge",u.textContent=r,s.appendChild(u)}var c=document.createElementNS("http://www.w3.org/2000/svg","svg");c.setAttribute("class","skip-intro-icon"),c.setAttribute("viewBox","0 0 24 24"),c.setAttribute("fill","currentColor");var d=document.createElementNS("http://www.w3.org/2000/svg","path");d.setAttribute("d","M5.5 18.5V5.5L14 12L5.5 18.5Z");var p=document.createElementNS("http://www.w3.org/2000/svg","path");p.setAttribute("d","M14 18.5V5.5L22.5 12L14 18.5Z"),c.appendChild(d),c.appendChild(p),s.appendChild(c);var _=document.createElement("span");if(_.className="skip-intro-hint",n){var h=Lampa.Storage.field("skip_intro_key_cancel")||"back";_.textContent="нажмите "+({back:"Назад",red:"Красная",green:"Зелёная",yellow:"Жёлтая",blue:"Синяя"}[h]||"Назад")+" для отмены"}else{for(var m={13:"OK",29443:"OK",65385:"OK",8:"Back",461:"Back",10009:"Back"},f=o.getSkipKeys(),g="OK",y=0;y<f.length;y++)if(m[f[y]]){g=m[f[y]];break}_.textContent="нажмите "+g}s.appendChild(_),a._hintEl=_,a.appendChild(s);var v=document.createElement("div");function k(t,e){for(var n=0;n<t.length;n++)if(t[n]===e)return!0;return!1}v.className="skip-intro-progress",v.style.width="0%",a.appendChild(v),this._progressBar=v,a._onSkip=e,a._onCancel=i||null,a._withCancel=!!n,s.addEventListener("click",function(t){t.preventDefault(),t.stopPropagation(),a._onSkip&&a._onSkip()});var b=[13,29443,65385];a._lampaKeyHandler=function(t){if(a.classList.contains("visible")){var e=t.code,n=o.getSkipKeys(),i=o.getCancelKeys();return k(n,e)&&!k(b,e)?(t.event&&(t.event.preventDefault(),t.event.stopPropagation()),void(a._onSkip&&a._onSkip())):a._withCancel&&k(i,e)?(t.event&&(t.event.preventDefault(),t.event.stopPropagation()),void(a._onCancel&&a._onCancel())):void 0}},a._lampaKeyupHandler=function(t){if(a.classList.contains("visible")){var e=t.code;if(k(b,e)){var n=o.getSkipKeys();(k(n,13)||k(n,29443)||k(n,65385))&&(t.event&&(t.event.preventDefault(),t.event.stopPropagation()),a._onSkip&&a._onSkip())}}},Lampa.Keypad&&Lampa.Keypad.listener&&(Lampa.Keypad.listener.follow("keydown",a._lampaKeyHandler),Lampa.Keypad.listener.follow("keyup",a._lampaKeyupHandler)),a._domKeyHandler=function(t){if(a.classList.contains("visible")){var e=t.keyCode,n=o.getSkipKeys(),i=o.getCancelKeys();return k(n,e)?(t.preventDefault(),t.stopPropagation(),void(a._onSkip&&a._onSkip())):a._withCancel&&k(i,e)?(t.preventDefault(),t.stopPropagation(),void(a._onCancel&&a._onCancel())):void 0}},document.addEventListener("keydown",a._domKeyHandler,!0),this._button=a;var S=document.querySelector(".player");S?S.appendChild(a):document.body.appendChild(a);var w=this;setTimeout(function(){w._setVisible(!0)},50)},_updateLabel:function(t,e){if(this._button){var n=this._button.querySelector(".skip-intro-label");n&&(n.textContent=t);var i=this._button.querySelector(".skip-intro-badge");i&&(i.textContent=e||"")}},_startCountdown:function(t){var e=this,n=Date.now();this._countdownInterval=setInterval(function(){var i=Date.now()-n,r=Math.min(1,i/4e3);e._progressBar&&(e._progressBar.style.width=100*r+"%"),i>=4e3&&(e._clearCountdown(),t&&t())},50)},_clearCountdown:function(){this._countdownInterval&&(clearInterval(this._countdownInterval),this._countdownInterval=null)},_removeListeners:function(t){t&&(Lampa.Keypad&&Lampa.Keypad.listener&&(t._lampaKeyHandler&&Lampa.Keypad.listener.remove("keydown",t._lampaKeyHandler),t._lampaKeyupHandler&&Lampa.Keypad.listener.remove("keyup",t._lampaKeyupHandler)),t._domKeyHandler&&document.removeEventListener("keydown",t._domKeyHandler,!0),t._lampaKeyHandler=null,t._lampaKeyupHandler=null,t._domKeyHandler=null)},hide:function(){if(this._clearCountdown(),this._button){this._setVisible(!1);var t=this._button,e=this;clearTimeout(this._fadeTimer),this._fadeTimer=setTimeout(function(){e._removeListeners(t),t&&t.parentNode&&t.parentNode.removeChild(t),e._button===t&&(e._button=null,e._progressBar=null)},350)}},destroy:function(){this._clearCountdown(),clearTimeout(this._fadeTimer),this._button&&(this._removeListeners(this._button),this._button.parentNode&&this._button.parentNode.removeChild(this._button)),this._button=null,this._progressBar=null,this._visible=!1,this._mode=null},_setVisible:function(t){this._visible=t,this._button&&(t?this._button.classList.add("visible"):this._button.classList.remove("visible"))},isVisible:function(){return this._visible},focus:function(){this._button&&this._button.focus()}},_=function(t,e){if(!t||!t.length)return null;for(var n=0;n<t.length;n++){var i=t[n];if(e>=i.start&&e<i.end)return i}return null},h={_segments:[],_activeSegment:null,_lastSkippedSegment:null,_currentData:null,_currentTmdbId:null,_detecting:!1,_detectionDone:!1,_inited:!1,init:function(){if(!this._inited){this._inited=!0,o.init();var t=this;Lampa.Player.listener.follow("start",function(e){t._onPlayerStart(e)}),Lampa.Player.listener.follow("destroy",function(){t._onDestroy()}),Lampa.PlayerVideo&&Lampa.PlayerVideo.listener&&Lampa.PlayerVideo.listener.follow("timeupdate",function(e){t._onTimeUpdate(e)}),console.log("[SkipIntro] Plugin v2.8 initialized | build: 2026-04-13T"+(new Date).toISOString().slice(11)+" | features: credits-detect, per-episode-cache, play-after-skip")}},_extractMeta:function(t){var e={tmdb_id:null,imdb_id:null,season:null,episode:null,is_series:!1},n=t.card||null;if(!n)try{var i=Lampa.Activity.active();i&&i.card&&(n=i.card),!n&&i&&i.movie&&(n=i.movie)}catch(t){}if(n&&(e.tmdb_id=n.id||null,e.imdb_id=n.imdb_id||null,n.name&&!n.title&&(e.is_series=!0),(n.number_of_seasons||n.first_air_date)&&(e.is_series=!0)),null!=t.season&&(e.season=parseInt(t.season)),null!=t.episode&&(e.episode=parseInt(t.episode)),(null==e.season||null==e.episode)&&t.title){var r=t.title.match(/[Ss](\d+)[Ee](\d+)/);r&&(null==e.season&&(e.season=parseInt(r[1])),null==e.episode&&(e.episode=parseInt(r[2])))}if(t.playlist&&Array.isArray(t.playlist))for(var o=t.url,a=0;a<t.playlist.length;a++){var s=t.playlist[a],l="string"==typeof s.url?s.url:"";if((l===o||0===a)&&(null!=s.season&&null==e.season&&(e.season=parseInt(s.season)),null!=s.episode&&null==e.episode&&(e.episode=parseInt(s.episode)),null!=s.s&&null==e.season&&(e.season=parseInt(s.s)),null!=s.e&&null==e.episode&&(e.episode=parseInt(s.e)),l===o))break}return null!=e.season&&null!=e.episode&&(e.is_series=!0),e},_onPlayerStart:function(t){if(this._segments=[],this._activeSegment=null,this._lastSkippedSegment=null,this._currentData=t,this._currentTmdbId=null,this._detecting=!1,this._detectionDone=!1,o.isEnabled()){var e=this._extractMeta(t);if(e.tmdb_id&&e.is_series&&null!=e.season&&null!=e.episode){this._currentTmdbId=e.tmdb_id,this._currentMeta=e,console.log("[SkipIntro] Loading segments for TMDB:",e.tmdb_id,"S"+e.season+"E"+e.episode);var n=this,i=!1,r=!1,a=[],s=[],l=function(){if(i&&r&&n._currentData===t){var e=a.slice();s.forEach(function(t){for(var n=!1,i=0;i<e.length;i++){var r=e[i];if(r.type===t.type){t.start<r.start&&(console.log("[SkipIntro] Detection found earlier "+t.type+":",t.start,"→",t.end,"(API had:",r.start,"→",r.end+")"),e[i]=t),n=!0;break}}n||e.push(t)}),n._segments=e,n._detectionDone=!0,console.log("[SkipIntro] Final merged segments:",e.length,e)}};d.load(e.tmdb_id,e.imdb_id,e.season,e.episode).then(function(e){n._currentData===t&&(a=e||[],i=!0,console.log("[SkipIntro] API segments:",a.length,a),a.length>0&&(n._segments=a,n._detectionDone=!0),l())}).catch(function(t){console.log("[SkipIntro] API error:",t),i=!0,l()}),o.isDetectEnabled()?n._runDetection(t,e,function(e){n._currentData===t&&(e&&e.length>0&&(s=e,e.forEach(function(t){console.log("[SkipIntro] Detection found:",t.type,t.start,"→",t.end,"("+(t._source||"unknown")+")")})),r=!0,l())}):r=!0}else console.log("[SkipIntro] Not a series or missing metadata, skipping",e)}},_runDetection:function(t,e,n){var i=l.get(e.tmdb_id,e.season,e.episode);if(i&&i.length>0)return console.log("[SkipIntro] Using cached detection for S"+e.season+"E"+e.episode+":",i.length,"segments"),void n(i);var r=this,o=0,a=function(){var i;try{i=Lampa.PlayerVideo.video()}catch(t){}if(!i||!i.duration)return++o<20&&r._currentData===t?void setTimeout(a,500):void n([]);u.detect(i).then(function(o){if(r._currentData===t){if(o&&o.length>0)return o.forEach(function(t){t._source="subs"}),l.set(e.tmdb_id,e.season,e.episode,o),console.log("[SkipIntro] Subtitle detection found",o.length,"segments"),void n(o);console.log("[SkipIntro] No subtitle segments, trying audio..."),c.detect(i).then(function(i){if(r._currentData===t)if(i){i._source="audio";var o=[i];l.set(e.tmdb_id,e.season,e.episode,o),n(o)}else n([]);else n([])}).catch(function(){n([])})}else n([])}).catch(function(){n([])})};a()},_onTimeUpdate:function(t){if(o.isEnabled()&&this._segments.length){var e=t.current;if(null!=e&&!isNaN(e)){var n=_(this._segments,e);if(n){if(!o.isTypeEnabled(n.type))return void(this._activeSegment&&this._hideButton());if(this._lastSkippedSegment===n)return;if(o.isAutoSkip())return void this._doSkip(n,!0);if(this._activeSegment!==n){this._activeSegment=n;var i=this._currentTmdbId,r="subs"===n._source?"(по субтитрам)":"audio"===n._source?"(по звуку)":null;i&&a.hasSkipped(i,n.type)?this._showCountdownButton(n,r):this._showNormalButton(n,r)}}else this._activeSegment&&this._hideButton()}}},_showNormalButton:function(t,e){var n=i[t.type]||"Пропустить",r=this;p.showNormal(n,function(){r._currentTmdbId&&a.rememberSkip(r._currentTmdbId,t.type),r._doSkip(t,!1)},e)},_showCountdownButton:function(t,e){var n=i[t.type]||"Пропустить",r=this;p.showCountdown(n,function(){r._doSkip(t,!0)},function(){console.log("[SkipIntro] Auto-skip cancelled by user"),r._currentTmdbId&&a.forgetSkip(r._currentTmdbId,t.type),r._lastSkippedSegment=t,p.destroy(),r._activeSegment=null},e)},_hideButton:function(){this._activeSegment=null,p.hide()},_doSkip:function(t,e){this._lastSkippedSegment=t,this._activeSegment=null,p.destroy();try{var n=Lampa.PlayerVideo.video();if(n){var i=Math.min(t.end,n.duration||t.end);n.currentTime=i,console.log("[SkipIntro] Skipped",t.type,"to",i,e?"(auto)":"(manual)"),setTimeout(function(){try{n.paused&&n.play()}catch(t){}},100)}}catch(t){console.log("[SkipIntro] Error seeking:",t)}},_onDestroy:function(){this._segments=[],this._activeSegment=null,this._lastSkippedSegment=null,this._currentData=null,this._currentTmdbId=null,this._detecting=!1,this._detectionDone=!1,p.destroy(),c.destroy()}};if(window.Lampa&&Lampa.Listener)Lampa.Listener.follow("app",function(t){"ready"===t.type&&f()}),setTimeout(f,1e3);else var m=setInterval(function(){window.Lampa&&Lampa.Listener&&(clearInterval(m),Lampa.Listener.follow("app",function(t){"ready"===t.type&&f()}),setTimeout(f,1e3))},300)}function f(){window.Lampa&&Lampa.SettingsApi&&Lampa.Player&&Lampa.Storage?h.init():setTimeout(f,500)}}();
+
+// last-watched-resume.js
+(function () {
+    'use strict';
+
+    if (window.__vahagnLastWatchedResumeLoaded) return;
+    window.__vahagnLastWatchedResumeLoaded = true;
+
+    // ========================================================================
+    // Constants
+    // ========================================================================
+
+    var LOG_PREFIX           = '[LastWatchedResume]';
+    var NS                   = 'last_watched_resume_';
+    var QUEUE_KEY            = NS + 'queue';
+    var ENABLED_KEY          = NS + 'enabled';
+    var CLEAR_KEY            = NS + 'clear';
+    var ROW_NAME             = 'last_watched_resume';
+    var MAX_QUEUE            = 5;
+    var AUTOCLICK_TIMEOUT_MS = 6000;
+    var MIN_APP_DIGITAL      = 300;
+    var REORDER_CLASS        = 'lwr-reorder-active';
+    var DELETE_UNDO_MS       = 4000;
+
+    var _initialized        = false;
+    var _captureBound       = false;
+    var _stylesInjected     = false;
+    var _activeAutoclick    = null; // current OnlineAutoclick / TorrentAutoclick
+
+    // Pending playback context — fed by activity / torrent_file / Torrent.open
+    // observers, drained by state:changed timeline updates. Cap at 8 entries
+    // and 5-minute TTL — covers user picking a card, browsing, then playing.
+    var _pendingContext     = [];
+    var PENDING_CAP         = 8;
+    var PENDING_TTL_MS      = 5 * 60 * 1000;
+
+    // Dedup short-circuit: if Player.listener('start') already wrote an entry
+    // for a given (card_id, season, episode) within this window, skip the
+    // Timeline-based fallback for the same payload — both signals can fire
+    // for the same playback.
+    var _recentRecord       = { key: '', ts: 0 };
+    var DEDUP_WINDOW_MS     = 30000;
+
+    // ========================================================================
+    // Logging helpers — single prefix, sub-event in first message word
+    // ========================================================================
+
+    function log() {
+        try {
+            var args = Array.prototype.slice.call(arguments);
+            args.unshift(LOG_PREFIX);
+            console.log.apply(console, args);
+        } catch (e) {}
+    }
+    function warn() {
+        try {
+            var args = Array.prototype.slice.call(arguments);
+            args.unshift(LOG_PREFIX);
+            console.warn.apply(console, args);
+        } catch (e) {}
+    }
+    function err() {
+        try {
+            var args = Array.prototype.slice.call(arguments);
+            args.unshift(LOG_PREFIX);
+            console.error.apply(console, args);
+        } catch (e) {}
+    }
+
+    // ========================================================================
+    // Profile-scoped storage
+    // ========================================================================
+
+    var Store = {
+        profileId: function () {
+            try {
+                if (window.Lampa && Lampa.Account && Lampa.Account.Permit && Lampa.Account.Permit.sync &&
+                    Lampa.Account.Permit.account && Lampa.Account.Permit.account.profile) {
+                    return Lampa.Account.Permit.account.profile.id;
+                }
+            } catch (e) {}
+            return null;
+        },
+        scope: function (key) {
+            var pid = Store.profileId();
+            return pid ? (key + '_' + pid) : (key + '_local');
+        },
+        getQueue: function () {
+            try {
+                var raw = Lampa.Storage.get(Store.scope(QUEUE_KEY), '[]');
+                if (raw && typeof raw === 'object' && raw.length === undefined) {
+                    // Lampa returned an object (shouldn't happen for [] default but be safe)
+                    return [];
+                }
+                if (typeof raw === 'string') {
+                    try { raw = JSON.parse(raw); } catch (e) { raw = []; }
+                }
+                if (!raw || raw.length === undefined) return [];
+                return raw;
+            } catch (e) { return []; }
+        },
+        setQueue: function (arr) {
+            try { Lampa.Storage.set(Store.scope(QUEUE_KEY), arr || []); }
+            catch (e) { err('storage:write fail', e && e.message); }
+        },
+        clearQueue: function () {
+            Store.setQueue([]);
+        },
+        upsert: function (entry) {
+            var queue = Store.getQueue();
+            var existingIdx = -1;
+            var i;
+            for (i = 0; i < queue.length; i++) {
+                if (queue[i] && queue[i].card_id === entry.card_id) { existingIdx = i; break; }
+            }
+            var action = existingIdx >= 0 ? 'update' : 'insert';
+            if (existingIdx >= 0) queue.splice(existingIdx, 1);
+            queue.unshift(entry);
+            var evicted = null;
+            if (queue.length > MAX_QUEUE) {
+                evicted = queue[queue.length - 1];
+                queue = queue.slice(0, MAX_QUEUE);
+            }
+            Store.setQueue(queue);
+            log('queue:write', 'action=' + action,
+                'card_id=' + entry.card_id,
+                'S' + (entry.season || '-') + 'E' + (entry.episode || '-'),
+                'kind=' + entry.source.kind,
+                'queue.length=' + queue.length);
+            if (evicted) {
+                log('queue:evict', 'card_id=' + evicted.card_id, 'reason=cap');
+            }
+        }
+    };
+
+    // ========================================================================
+    // Recording pipeline
+    // ========================================================================
+
+    function eligibleReason(data) {
+        if (!data) return 'no_data';
+        if (data.iptv === true) return 'iptv';
+        if (data.trailer === true) return 'trailer';
+        if (!data.card) return 'no_card';
+        if (!data.timeline) return 'no_timeline';
+        return null;
+    }
+
+    function detectSource(data) {
+        if (data.torrent_hash) {
+            // Magnet — captured by patchTorrentStart into pending context
+            // before TorrServer ever saw the hash. Pull it back so we can
+            // re-add the torrent later if TorrServer purged it.
+            var magnet = '';
+            if (data.card && data.card.id != null) {
+                var ctx = pendingContextForCard(data.card.id, 'torrent');
+                if (ctx && ctx.magnet) magnet = ctx.magnet;
+                if (!magnet) {
+                    var saved = readPendingSource(data.card.id);
+                    if (saved && saved.magnet) magnet = saved.magnet;
+                }
+            }
+            return {
+                kind:         'torrent',
+                torrent_hash: data.torrent_hash,
+                file_path:    extractFilePath(data),
+                magnet:       magnet
+            };
+        }
+        var balanser = '';
+        try { balanser = Lampa.Storage.get('online_balanser', '') || ''; } catch (e) {}
+        if (balanser) {
+            return { kind: 'online', balanser: balanser };
+        }
+        return { kind: 'other' };
+    }
+
+    function pendingContextForCard(card_id, kind) {
+        pruneContext();
+        var i;
+        for (i = 0; i < _pendingContext.length; i++) {
+            var p = _pendingContext[i];
+            if (p.card.id === card_id && p.kind === kind) return p;
+        }
+        return null;
+    }
+
+    function extractFilePath(data) {
+        if (data.path && typeof data.path === 'string') return data.path;
+        if (data.url && typeof data.url === 'string') {
+            var m = data.url.match(/[?&]path=([^&]+)/);
+            if (m) {
+                try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+            }
+        }
+        return '';
+    }
+
+    function onPlayerStart(data, evt) {
+        // Lampa's torrent flow calls Player.play(element) where `element`
+        // is the FILE descriptor (path, url, season, episode, torrent_hash,
+        // timeline) and does NOT carry a `card` field — Lampa pulls the
+        // card from Lampa.Activity.active().movie internally for its own
+        // footer rendering (vendor/lampa-source/src/interaction/player.js
+        // l. 962-966). We need to mirror that fallback or eligibleReason
+        // returns 'no_card' for every torrent play, leaving the queue
+        // entry without a magnet and forcing the user back through the
+        // fallback path on the next click — the exact symptom of "after
+        // watching, next click still redirects to torrent search".
+        if (data && !data.card) {
+            try {
+                var act = Lampa.Activity && Lampa.Activity.active && Lampa.Activity.active();
+                if (act && act.movie && act.movie.id != null) data.card = act.movie;
+            } catch (e) {}
+        }
+        var reason = eligibleReason(data);
+        if (reason) {
+            log('player:start', 'evt=' + evt, 'skip', 'reason=' + reason);
+            return;
+        }
+        var source = detectSource(data);
+        var entry = {
+            card_id:  data.card.id,
+            season:   data.season   || (data.card && data.card.season)  || null,
+            episode:  data.episode  || (data.card && data.card.episode) || null,
+            source:   source,
+            saved_at: Date.now()
+        };
+        log('player:start',
+            'evt=' + evt,
+            'card_id=' + entry.card_id,
+            'S' + (entry.season || '-') + 'E' + (entry.episode || '-'),
+            'kind=' + source.kind,
+            (source.kind === 'online'  ? 'balanser=' + source.balanser :
+             source.kind === 'torrent' ? 'hash=' + (source.torrent_hash || '').slice(0, 8) + ' path=' + (source.file_path || '<none>') :
+             'other'));
+        markRecorded(entry);
+        Store.upsert(entry);
+    }
+
+    function markRecorded(entry) {
+        _recentRecord = {
+            key: entry.card_id + ':' + (entry.season || '-') + ':' + (entry.episode || '-'),
+            ts:  Date.now()
+        };
+    }
+
+    function recentlyRecorded(card_id, season, episode) {
+        if (!_recentRecord.key) return false;
+        if (Date.now() - _recentRecord.ts > DEDUP_WINDOW_MS) return false;
+        var k = card_id + ':' + (season || '-') + ':' + (episode || '-');
+        return k === _recentRecord.key;
+    }
+
+    // ========================================================================
+    // Pending context — fed by activity navigations and Torrent.open patch
+    // ========================================================================
+
+    function pruneContext() {
+        var cutoff = Date.now() - PENDING_TTL_MS;
+        var i;
+        var kept = [];
+        for (i = 0; i < _pendingContext.length; i++) {
+            if (_pendingContext[i].ts >= cutoff) kept.push(_pendingContext[i]);
+        }
+        _pendingContext = kept.slice(0, PENDING_CAP);
+    }
+
+    function rememberContext(card, kind, extra) {
+        if (!card || card.id == null) return;
+        pruneContext();
+        // Drop existing context for the same card_id + kind so the most
+        // recent observation always wins (e.g. user re-opens the same card).
+        var filtered = [];
+        var i;
+        for (i = 0; i < _pendingContext.length; i++) {
+            var p = _pendingContext[i];
+            if (!(p.card.id === card.id && p.kind === kind)) filtered.push(p);
+        }
+        var ctx = {
+            card:         card,
+            kind:         kind,
+            balanser:     extra && extra.balanser     ? extra.balanser     : null,
+            torrent_hash: extra && extra.torrent_hash ? extra.torrent_hash : null,
+            file_path:    extra && extra.file_path    ? extra.file_path    : null,
+            magnet:       extra && extra.magnet       ? extra.magnet       : null,
+            ts:           Date.now()
+        };
+        // If we already had context with a magnet for this card and the new
+        // observation doesn't include one, preserve the magnet — Lampa fires
+        // multiple events for one playback (Torrent.start → Torrent.open →
+        // torrent_file) and only the first carries MagnetUri.
+        if (!ctx.magnet) {
+            var prior;
+            for (i = 0; i < _pendingContext.length; i++) {
+                prior = _pendingContext[i];
+                if (prior.card.id === card.id && prior.magnet) {
+                    ctx.magnet = prior.magnet;
+                    break;
+                }
+            }
+        }
+        filtered.unshift(ctx);
+        _pendingContext = filtered.slice(0, PENDING_CAP);
+        log('context:remember',
+            'card_id=' + card.id,
+            'kind=' + kind,
+            (ctx.balanser     ? 'balanser=' + ctx.balanser : ''),
+            (ctx.torrent_hash ? 'hash=' + ctx.torrent_hash.slice(0, 8) : ''),
+            (ctx.magnet       ? 'magnet=present' : ''),
+            'pending=' + _pendingContext.length);
+    }
+
+    function findContextForHash(hash) {
+        pruneContext();
+        var i;
+        for (i = 0; i < _pendingContext.length; i++) {
+            var p = _pendingContext[i];
+            var hashes = computeCardHashes(p.card);
+            if (hashes.indexOf(String(hash)) !== -1) return p;
+        }
+        return null;
+    }
+
+    // Compute the full set of (movie OR season+episode) hashes Lampa might
+    // produce for a given card — see `vendor/lampa-source/plugins/online/online.js:253`
+    // and `Lampa.Timeline.view` semantics. Series cards expose `seasons` with
+    // `episode_count` per season; movies use just original_title.
+    function computeCardHashes(card) {
+        var out = [];
+        if (!card) return out;
+        var origTitle = card.original_title || card.original_name || '';
+        try { out.push(String(Lampa.Utils.hash(origTitle))); } catch (e) {}
+        // Series — try every season/episode combination from card.seasons
+        var seasons = card.seasons;
+        if (seasons && seasons.length) {
+            var s, e, season, epCount, sep, h;
+            for (s = 0; s < seasons.length; s++) {
+                season = seasons[s].season_number;
+                if (season == null || season === 0) continue; // 0 = Specials
+                epCount = seasons[s].episode_count || 30;
+                sep = season > 10 ? ':' : '';
+                for (e = 1; e <= epCount; e++) {
+                    try { h = Lampa.Utils.hash(season + sep + e + origTitle); }
+                    catch (ex) { continue; }
+                    out.push(String(h));
+                }
+            }
+        }
+        return out;
+    }
+
+    // Given a card and a confirmed hash that matched, figure out which season
+    // and episode produced it. Returns {season, episode} or {season:null, episode:null}
+    // for movies / unknown.
+    function reverseSeasonEpisode(card, hash) {
+        if (!card) return { season: null, episode: null };
+        var origTitle = card.original_title || card.original_name || '';
+        var seasons = card.seasons;
+        if (!seasons || !seasons.length) return { season: null, episode: null };
+        var s, e, season, epCount, sep, h;
+        var target = String(hash);
+        for (s = 0; s < seasons.length; s++) {
+            season = seasons[s].season_number;
+            if (season == null || season === 0) continue;
+            epCount = seasons[s].episode_count || 30;
+            sep = season > 10 ? ':' : '';
+            for (e = 1; e <= epCount; e++) {
+                try { h = Lampa.Utils.hash(season + sep + e + origTitle); }
+                catch (ex) { continue; }
+                if (String(h) === target) return { season: season, episode: e };
+            }
+        }
+        return { season: null, episode: null };
+    }
+
+    function onActivity(e) {
+        try {
+            // When the user lands back on the main screen, queue may have
+            // been mutated mid-session (post-watch) but the row DOM still
+            // shows the boot snapshot. Run a row-sync as a safety net for
+            // the case where Player.listener('destroy') didn't reach us
+            // (verified empirically on Tizen — native player can swallow
+            // the event when handing focus back).
+            var compTop = (e && typeof e.component === 'string') ? e.component
+                       : (e && e.object && typeof e.object.component === 'string') ? e.object.component
+                       : '';
+            if (compTop === 'main') scheduleRowSync('activity_main');
+        } catch (ex) {}
+        try {
+            // Lampa fires activity events as {component, type, object} —
+            // component is a string (top-level), object is the activity
+            // descriptor with movie/card/url/etc. (Earlier we tried
+            // `e.object.activity.component`, but `activity` on the
+            // descriptor is a method, not a nested object — its `.component`
+            // resolved to undefined and the whole handler short-circuited.)
+            if (!e || !e.object) return;
+            var comp = (typeof e.component === 'string') ? e.component
+                     : (typeof e.object.component === 'string') ? e.object.component
+                     : '?';
+            var card = e.object.movie || e.object.card;
+            if (!card || card.id == null) return;
+
+            if (comp === 'online') {
+                // Lampa stores last balanser under 'online_last_balanser';
+                // older builds use 'online_balanser'. Try both.
+                var bal = '';
+                try { bal = Lampa.Storage.get('online_last_balanser', '') || ''; } catch (ex) {}
+                if (!bal) {
+                    try { bal = Lampa.Storage.get('online_balanser', '') || ''; } catch (ex) {}
+                }
+                rememberContext(card, 'online', { balanser: bal });
+                persistPendingSource(card.id, { kind: 'online', balanser: bal });
+            } else if (comp === 'torrents') {
+                // Card opened the torrent search list — remember as torrent
+                // candidate; we'll narrow torrent_hash + file_path later via
+                // Torrent.open patch + torrent_file listener.
+                rememberContext(card, 'torrent', {});
+                persistPendingSource(card.id, { kind: 'torrent' });
+            }
+        } catch (ex) { warn('activity', 'fail', ex && ex.message); }
+    }
+
+    // ------------------------------------------------------------------------
+    // Pending-source side table — survives JS freeze during native playback.
+    //
+    // Tizen / WebOS / Android native players background the WebView during
+    // playback; log-collector buffer is lost on next reload. But Lampa.Storage
+    // writes are synchronous and persistent — so we mirror "user navigated to
+    // online/torrent for card X" into Storage immediately. On next boot the
+    // reconcile step reads file_view_<profile>, finds new timeline entries,
+    // looks up pending source by card_id, and adds queue entries for plays
+    // we never saw events for.
+    // ------------------------------------------------------------------------
+
+    var PENDING_SRC_KEY = NS + 'pending_src';
+    var PENDING_SRC_CAP = 30; // remember source for up to 30 recent cards
+
+    function pendingSrcMap() {
+        try {
+            var raw = Lampa.Storage.get(Store.scope(PENDING_SRC_KEY), '{}');
+            if (typeof raw === 'string') {
+                try { raw = JSON.parse(raw); } catch (e) { raw = {}; }
+            }
+            return (raw && typeof raw === 'object') ? raw : {};
+        } catch (e) { return {}; }
+    }
+
+    function persistPendingSource(card_id, source) {
+        try {
+            if (card_id == null) return;
+            var map = pendingSrcMap();
+            map[card_id] = { kind: source.kind, balanser: source.balanser || null,
+                             torrent_hash: source.torrent_hash || null,
+                             file_path: source.file_path || null,
+                             magnet: source.magnet || null,
+                             ts: Date.now() };
+            // Cap by trimming oldest entries when over capacity.
+            var keys = Object.keys(map);
+            if (keys.length > PENDING_SRC_CAP) {
+                keys.sort(function (a, b) { return (map[a].ts || 0) - (map[b].ts || 0); });
+                var drop = keys.length - PENDING_SRC_CAP;
+                var i;
+                for (i = 0; i < drop; i++) delete map[keys[i]];
+            }
+            Lampa.Storage.set(Store.scope(PENDING_SRC_KEY), map);
+        } catch (e) { warn('pending_src', 'persist fail', e && e.message); }
+    }
+
+    function readPendingSource(card_id) {
+        var map = pendingSrcMap();
+        return map[card_id] || null;
+    }
+
+    // Monkey-patch Lampa.Torrent.start(element, movie) — primary path through
+    // which Lampa launches a torrent from the search-results screen. The
+    // `element` here carries `MagnetUri` / `Link` BEFORE TorrServer ever sees
+    // a hash. Capturing the magnet now means our queue entry can re-add the
+    // torrent to TorrServer on resume, even if it was purged in between.
+    var _origTorrentStart = null;
+    function patchTorrentStart() {
+        try {
+            if (!Lampa.Torrent || typeof Lampa.Torrent.start !== 'function') return;
+            if (Lampa.Torrent.start.__lwr_patched) return;
+            _origTorrentStart = Lampa.Torrent.start;
+            Lampa.Torrent.start = function (element, movie) {
+                try {
+                    if (movie && movie.id != null && element) {
+                        var magnet = element.MagnetUri || element.Link || '';
+                        if (magnet) {
+                            rememberContext(movie, 'torrent', { magnet: magnet });
+                            persistPendingSource(movie.id, { kind: 'torrent', magnet: magnet });
+                        }
+                    }
+                } catch (ex) {}
+                return _origTorrentStart.apply(this, arguments);
+            };
+            Lampa.Torrent.start.__lwr_patched = true;
+        } catch (ex) { warn('patch', 'Torrent.start fail', ex && ex.message); }
+    }
+
+    // Monkey-patch Lampa.Torrent.open(hash, card) to capture torrent context
+    // BEFORE the file picker even renders. Restore the original on next init
+    // (idempotent — guard prevents double-wrap).
+    var _origTorrentOpen = null;
+    function patchTorrentOpen() {
+        try {
+            if (!Lampa.Torrent || typeof Lampa.Torrent.open !== 'function') return;
+            if (Lampa.Torrent.open.__lwr_patched) return;
+            _origTorrentOpen = Lampa.Torrent.open;
+            Lampa.Torrent.open = function (hash, card) {
+                try {
+                    if (card && card.id != null) {
+                        rememberContext(card, 'torrent', { torrent_hash: hash });
+                        persistPendingSource(card.id, { kind: 'torrent', torrent_hash: hash });
+                    }
+                } catch (ex) {}
+                return _origTorrentOpen.apply(this, arguments);
+            };
+            Lampa.Torrent.open.__lwr_patched = true;
+        } catch (ex) { warn('patch', 'Torrent.open fail', ex && ex.message); }
+    }
+
+    // Wrap Lampa.Player.play. On Tizen / WebOS / Android, Player.listener's
+    // 'start' / 'external' events do not always reach plugin-side subscribers
+    // (verified empirically on Tizen 9). Calling the recorder from inside the
+    // wrapped Player.play guarantees we never miss a play that the dispatcher
+    // actually reached, regardless of which event later fires.
+    var _origPlayerPlay = null;
+    function patchPlayerPlay() {
+        try {
+            if (!Lampa.Player || typeof Lampa.Player.play !== 'function') return;
+            if (Lampa.Player.play.__lwr_patched) return;
+            _origPlayerPlay = Lampa.Player.play;
+            Lampa.Player.play = function (data) {
+                try {
+                    // Don't gate on data.card here — Lampa's torrent flow
+                    // omits it (it's pulled from Activity.active().movie
+                    // internally). onPlayerStart's own fallback resolves
+                    // the card; gating up-front would short-circuit it.
+                    if (data && !data.iptv && !data.trailer) {
+                        onPlayerStart(data, 'patch-play');
+                    }
+                } catch (ex) {}
+                return _origPlayerPlay.apply(this, arguments);
+            };
+            Lampa.Player.play.__lwr_patched = true;
+        } catch (ex) { warn('patch', 'Player.play fail', ex && ex.message); }
+    }
+
+    // Capture the file path from the torrent picker — this fires when the
+    // user actually selects a file, before playback begins. Updates the
+    // most recent torrent context with the chosen path.
+    function onTorrentFile(e) {
+        try {
+            if (!e || e.type !== 'onenter') return;
+            if (!e.element || !e.element.path) return;
+            // Patch the most recent torrent-kind context's file_path.
+            var i;
+            for (i = 0; i < _pendingContext.length; i++) {
+                if (_pendingContext[i].kind === 'torrent') {
+                    _pendingContext[i].file_path = e.element.path;
+                    if (e.element.torrent_hash && !_pendingContext[i].torrent_hash) {
+                        _pendingContext[i].torrent_hash = e.element.torrent_hash;
+                    }
+                    log('context:torrent_file',
+                        'card_id=' + _pendingContext[i].card.id,
+                        'path=' + e.element.path);
+                    // Mirror to persistent side-table — reconcile on next
+                    // boot needs this even if JS freezes during playback.
+                    persistPendingSource(_pendingContext[i].card.id, {
+                        kind:         'torrent',
+                        torrent_hash: _pendingContext[i].torrent_hash || (e.element.torrent_hash || null),
+                        file_path:    e.element.path
+                    });
+                    break;
+                }
+            }
+        } catch (ex) { warn('torrent_file', 'fail', ex && ex.message); }
+    }
+
+    // ========================================================================
+    // Reconcile-on-boot — recover from JS-frozen playback sessions
+    // ========================================================================
+    //
+    // When Tizen native player takes over the WebView, log-collector buffer
+    // and even my Player.play monkey-patch may not run. But Lampa.Timeline
+    // writes synchronously to file_view_<profile_id> in localStorage during
+    // playback (and especially on its destroy). On next Lampa boot, this
+    // storage holds the truth about what was watched.
+    //
+    // Strategy:
+    //   1. Read file_view_<profile> from Storage.
+    //   2. For each hash with road.percent > 0:
+    //      - if it's a hash we've already represented in our queue, skip
+    //      - else reverse-lookup card from Lampa.Favorite('history')
+    //      - if matched: read source from PENDING_SRC_KEY map (saved by
+    //        activity / Torrent.open patches before playback)
+    //      - upsert queue entry (idempotent — Store.upsert dedupes by card_id)
+    //
+    // This catches:
+    //   - Tizen torrent playback that bypassed all in-flight hooks.
+    //   - Restored sessions where JS event loop was throttled.
+    //   - Quirky online plugins that don't fire activity events.
+
+    function reconcileFromTimeline() {
+        try {
+            var pid = Store.profileId();
+            var fileViewKey = 'file_view' + (pid ? '_' + pid : '');
+            var raw;
+            try { raw = Lampa.Storage.get(fileViewKey, '{}'); }
+            catch (e) { warn('reconcile', 'storage.get fail', e && e.message); return; }
+            if (typeof raw === 'string') {
+                try { raw = JSON.parse(raw); } catch (e) { raw = {}; }
+            }
+            if (!raw || typeof raw !== 'object') return;
+
+            var hashCount = 0;
+            var k; for (k in raw) { if (Object.prototype.hasOwnProperty.call(raw, k)) hashCount++; }
+            log('reconcile:start', 'fileViewKey=' + fileViewKey, 'hashes=' + hashCount);
+            if (!hashCount) { log('reconcile:done', 'no_hashes'); return; }
+
+            // Build set of hashes already covered by our queue (to skip).
+            var covered = {};
+            var queue = Store.getQueue();
+            var i;
+            for (i = 0; i < queue.length; i++) {
+                var entry = queue[i];
+                if (!entry || entry.card_id == null) continue;
+                // Look up card from history to compute its hashes
+                var cardForCovered = lookupCardFromHistory(entry.card_id);
+                if (!cardForCovered) continue;
+                var hs = computeCardHashes(cardForCovered);
+                var j; for (j = 0; j < hs.length; j++) covered[hs[j]] = true;
+            }
+
+            // Build hash → card index from history
+            var hist = Lampa.Favorite && Lampa.Favorite.get ? (Lampa.Favorite.get('history') || []) : [];
+            log('reconcile:scan', 'history=' + hist.length, 'covered=' + Object.keys(covered).length);
+            var hashToCard = {};
+            for (i = 0; i < hist.length; i++) {
+                var c = hist[i];
+                if (!c || c.id == null) continue;
+                var cardHashes = computeCardHashes(c);
+                var hi;
+                for (hi = 0; hi < cardHashes.length; hi++) {
+                    if (!hashToCard[cardHashes[hi]]) hashToCard[cardHashes[hi]] = c;
+                }
+            }
+
+            // Walk timeline entries and reconstruct queue items
+            var added = 0;
+            var unmatched = 0;
+            var hashes = Object.keys(raw);
+            // Sort hashes by some heuristic? They have no timestamp. Just
+            // process in insertion order and rely on dedup.
+            for (i = 0; i < hashes.length; i++) {
+                var h = String(hashes[i]);
+                var road = raw[h];
+                if (!road) continue;
+                var percent = (typeof road === 'object') ? road.percent : road;
+                if (!percent || percent <= 0) continue;
+                if (covered[h]) continue;
+                var card = hashToCard[h];
+                if (!card) { unmatched++; continue; }
+                var se = reverseSeasonEpisode(card, h);
+                var srcInfo = readPendingSource(card.id);
+                var source;
+                if (srcInfo && srcInfo.kind === 'torrent') {
+                    source = {
+                        kind:         'torrent',
+                        torrent_hash: srcInfo.torrent_hash || '',
+                        file_path:    srcInfo.file_path    || '',
+                        magnet:       srcInfo.magnet       || ''
+                    };
+                } else if (srcInfo && srcInfo.kind === 'online') {
+                    source = { kind: 'online', balanser: srcInfo.balanser || '' };
+                } else {
+                    source = { kind: 'unknown' };
+                }
+                Store.upsert({
+                    card_id:  card.id,
+                    season:   se.season,
+                    episode:  se.episode,
+                    source:   source,
+                    saved_at: Date.now()
+                });
+                added++;
+                log('reconcile:added',
+                    'card_id=' + card.id,
+                    'S' + (se.season || '-') + 'E' + (se.episode || '-'),
+                    'kind=' + source.kind,
+                    'hash=' + h);
+            }
+            log('reconcile:done', 'added=' + added, 'unmatched=' + unmatched);
+        } catch (ex) { err('reconcile', 'fail', ex && ex.message); }
+    }
+
+    function lookupCardFromHistory(card_id) {
+        var idx = historyMap();
+        return idx[card_id] || null;
+    }
+
+    // Coalesce reconcile triggers — favorite events can fire several times
+    // per second during cloud sync; we want at most one reconcile per 500ms.
+    var _reconcileTimer = null;
+    function scheduleReconcile(reason) {
+        if (_reconcileTimer) return;
+        _reconcileTimer = setTimeout(function () {
+            _reconcileTimer = null;
+            log('reconcile:trigger', 'reason=' + reason);
+            reconcileFromTimeline();
+            // Also refresh the row so newly-added entries appear without
+            // requiring a navigation event. Activity.toggle is the
+            // accepted way to force a row redraw.
+            try {
+                if (Lampa.Activity && Lampa.Activity.active &&
+                    Lampa.Activity.active() && Lampa.Activity.active().component === 'main') {
+                    var act = Lampa.Activity.active();
+                    if (act && typeof act.toggle === 'function') act.toggle();
+                }
+            } catch (e) {}
+        }, 500);
+    }
+
+    function onStateChanged(e) {
+        try {
+            // Favorite list changed (initial sync, cloud pull, manual edit) —
+            // re-run reconcile because new history cards may match timeline
+            // hashes we couldn't match at boot. Rate-limit so cloud pulls
+            // that fire multiple times per second don't thrash.
+            if (e && e.target === 'favorite' && e.reason === 'read') {
+                scheduleReconcile('favorite_changed');
+                return;
+            }
+
+            if (!e || e.target !== 'timeline' || e.reason !== 'update') return;
+            if (!e.data || e.data.hash == null) return;
+            var hash = e.data.hash;
+            var ctx  = findContextForHash(hash);
+            if (!ctx) {
+                // No matching context — most likely a timeline sync from
+                // server, not local playback. Skip silently.
+                return;
+            }
+            var se = reverseSeasonEpisode(ctx.card, hash);
+            if (recentlyRecorded(ctx.card.id, se.season, se.episode)) {
+                // Player.listener already wrote this — don't double-record.
+                return;
+            }
+            var source;
+            if (ctx.kind === 'torrent') {
+                source = {
+                    kind:         'torrent',
+                    torrent_hash: ctx.torrent_hash || '',
+                    file_path:    ctx.file_path    || '',
+                    magnet:       ctx.magnet       || ''
+                };
+            } else if (ctx.kind === 'online') {
+                source = { kind: 'online', balanser: ctx.balanser || '' };
+            } else {
+                source = { kind: 'other' };
+            }
+            var entry = {
+                card_id:  ctx.card.id,
+                season:   se.season,
+                episode:  se.episode,
+                source:   source,
+                saved_at: Date.now()
+            };
+            log('player:start',
+                'evt=timeline',
+                'card_id=' + entry.card_id,
+                'S' + (entry.season || '-') + 'E' + (entry.episode || '-'),
+                'kind=' + source.kind,
+                (source.kind === 'online'  ? 'balanser=' + source.balanser :
+                 source.kind === 'torrent' ? 'hash=' + (source.torrent_hash || '').slice(0, 8) + ' path=' + (source.file_path || '<none>') :
+                 'other'));
+            markRecorded(entry);
+            Store.upsert(entry);
+        } catch (ex) { warn('state:changed', 'fail', ex && ex.message); }
+    }
+
+    // ========================================================================
+    // Card hydration from Lampa.Favorite('history')
+    // ========================================================================
+
+    // Two-layer card source:
+    //   1. Lampa.Favorite.get({type: 'history'}) — official API (note the
+    //      {type:...} object form — passing a bare string returns empty
+    //      because get(params) reads params.type).
+    //   2. Lampa.Storage.get('favorite').card — local cache of every card
+    //      Lampa has touched, regardless of category. Used as fallback
+    //      when sync hasn't pulled cloud bookmarks yet at boot.
+    //
+    // The 'favorite' storage shape is {card: [...full cards], history: [ids],
+    // viewed: [ids], like: [ids], etc.}. We index all cards by id from any
+    // source we can find — caller dedupes naturally on lookup.
+    function historyMap() {
+        var idx = {};
+        try {
+            // Layer 1: official API
+            if (Lampa.Favorite && typeof Lampa.Favorite.get === 'function') {
+                var hist = [];
+                try { hist = Lampa.Favorite.get({ type: 'history' }) || []; } catch (e) {}
+                var i;
+                for (i = 0; i < hist.length; i++) {
+                    if (hist[i] && hist[i].id != null) idx[hist[i].id] = hist[i];
+                }
+            }
+        } catch (e) {}
+        try {
+            // Layer 2: storage fallback — pulls in every card Lampa has,
+            // including ones not yet synced into the in-memory history
+            // array right after boot.
+            var fav = Lampa.Storage.get('favorite', '{}');
+            if (typeof fav === 'string') {
+                try { fav = JSON.parse(fav); } catch (e) { fav = {}; }
+            }
+            if (fav && fav.card && fav.card.length) {
+                var j;
+                for (j = 0; j < fav.card.length; j++) {
+                    var c = fav.card[j];
+                    if (c && c.id != null && !idx[c.id]) idx[c.id] = c;
+                }
+            }
+        } catch (e) {}
+        return idx;
+    }
+
+    function hydrateAndPrune(queue) {
+        var hist = historyMap();
+        var visible = [];
+        var orphans = [];
+        var kept    = [];
+        var i;
+        for (i = 0; i < queue.length; i++) {
+            var entry = queue[i];
+            if (!entry || entry.card_id == null) { orphans.push(entry && entry.card_id); continue; }
+            var card = hist[entry.card_id];
+            if (card) {
+                visible.push({ entry: entry, card: card });
+                kept.push(entry);
+            } else {
+                orphans.push(entry.card_id);
+            }
+        }
+        if (orphans.length) {
+            for (i = 0; i < orphans.length; i++) {
+                log('queue:orphan', 'card_id=' + orphans[i], 'reason=not_in_history');
+            }
+            Store.setQueue(kept);
+        }
+        return visible;
+    }
+
+    // ========================================================================
+    // Row registration (main screen)
+    // ========================================================================
+
+    function isEnabled() {
+        try { return Lampa.Storage.field(ENABLED_KEY) !== false; } catch (e) { return true; }
+    }
+
+    function buildRowCard(entry, card) {
+        // Shallow clone so our marker doesn't pollute Lampa.Favorite('history').
+        var out = {};
+        var k;
+        for (k in card) {
+            if (Object.prototype.hasOwnProperty.call(card, k)) out[k] = card[k];
+        }
+        out.__last_watched_resume = true;
+        out.__lwr_entry = entry; // attached for click handler lookup
+        return out;
+    }
+
+    function buildPlaceholderCard() {
+        return {
+            __last_watched_resume: true,
+            __last_watched_resume_placeholder: true,
+            id:    null,
+            title: tr('lwr_empty_title'),
+            name:  tr('lwr_empty_title'),
+            release_date: '',
+            first_air_date: '',
+            poster_path: '',
+            background_image: '',
+            // Lampa expects vote_average for the rating badge; use 0 so it's hidden.
+            vote_average: 0,
+            // No img — Card class will fall back to its broken-image placeholder.
+            img: ''
+        };
+    }
+
+    function registerRow() {
+        var ver = (Lampa.Manifest && typeof Lampa.Manifest.app_digital === 'number')
+                  ? Lampa.Manifest.app_digital : 0;
+        if (ver < MIN_APP_DIGITAL) {
+            log('init', 'version_too_low', 'app_digital=' + ver, 'row=skipped');
+            return;
+        }
+        if (!Lampa.ContentRows || typeof Lampa.ContentRows.add !== 'function') {
+            log('init', 'content_rows_api_missing', 'row=skipped');
+            return;
+        }
+        Lampa.ContentRows.add({
+            name:   ROW_NAME,
+            title:  tr('lwr_row_title'),
+            index:  -1000,
+            screen: ['main'],
+            call:   function (/* params, screen */) {
+                if (!isEnabled()) return; // undefined → row not rendered
+                var queue   = Store.getQueue();
+                var visible = hydrateAndPrune(queue);
+                if (!visible.length) {
+                    log('row:empty', 'placeholder=true');
+                    var ph = buildPlaceholderCard();
+                    return function (cb) {
+                        cb({ title: tr('lwr_row_title'), results: [ph] });
+                    };
+                }
+                log('row:render', 'count=' + visible.length);
+                var results = [];
+                var i;
+                for (i = 0; i < visible.length; i++) {
+                    results.push(buildRowCard(visible[i].entry, visible[i].card));
+                }
+                return function (cb) {
+                    cb({ title: tr('lwr_row_title'), results: results });
+                };
+            }
+        });
+        log('init', 'row=registered', 'app_digital=' + ver);
+    }
+
+    // ========================================================================
+    // Click interception — capture-phase on document.body
+    // ========================================================================
+
+    function findOurCardData(el) {
+        var node = el;
+        while (node && node !== document.body && node !== document) {
+            if (node.card_data && node.card_data.__last_watched_resume === true) {
+                return node.card_data;
+            }
+            node = node.parentNode;
+        }
+        return null;
+    }
+
+    function onCaptureEvent(e) {
+        if (!isEnabled()) return;
+        var data = findOurCardData(e.target);
+        if (!data) return;
+        try { e.stopImmediatePropagation(); } catch (ex) {}
+        try { e.preventDefault(); } catch (ex) {}
+
+        if (data.__last_watched_resume_placeholder) {
+            log('click', 'placeholder=true');
+            return;
+        }
+
+        var entry = data.__lwr_entry;
+        if (!entry) {
+            warn('click', 'intercepted=true', 'entry_missing=true', 'card_id=' + (data.id || '?'));
+            return;
+        }
+        // Always re-read from Storage at click time. The DOM-attached entry
+        // is a SNAPSHOT taken when the row was first rendered (boot). After
+        // a watch through the fallback path, Store.upsert wrote a fresher
+        // entry with the captured magnet — without this re-read the click
+        // would still go through the old (no-magnet) source and bounce
+        // back to the torrent-search redirect.
+        var fresh = findEntryByCardId(entry.card_id);
+        if (fresh) {
+            entry = fresh;
+            data.__lwr_entry = fresh;
+        }
+        log('click', 'intercepted=true',
+            'card_id=' + entry.card_id,
+            'kind=' + entry.source.kind,
+            'magnet=' + (entry.source && entry.source.magnet ? 'present' : 'absent'),
+            'S' + (entry.season || '-') + 'E' + (entry.episode || '-'));
+        dispatchResume(entry, data);
+    }
+
+    function findEntryByCardId(card_id) {
+        var queue = Store.getQueue();
+        var i;
+        for (i = 0; i < queue.length; i++) {
+            if (queue[i] && queue[i].card_id === card_id) return queue[i];
+        }
+        return null;
+    }
+
+    // ========================================================================
+    // Row sync — reflect post-watch queue changes without app reload
+    // ========================================================================
+    //
+    // ContentRows.call() is invoked ONCE at boot — Lampa has no public API
+    // to re-run it in place. After a watch updates the queue (new magnet,
+    // queue reorder, eviction), the DOM cards still hold the snapshot from
+    // boot: stale __lwr_entry, original order. Without this sync, clicking
+    // the same card after a watch goes through the OLD (magnet-less) entry
+    // and falls back to torrent-search again — the loop the user reported.
+    //
+    // We can't reconstruct missing cards (Lampa.Card class isn't part of
+    // the public API in 3.1.x), but we CAN imperatively reorder existing
+    // ones, drop evicted ones, and refresh __lwr_entry on each — covers
+    // the dominant case (re-watch of an existing row card).
+
+    var _syncTimer = null;
+    function scheduleRowSync(reason) {
+        if (_syncTimer) return;
+        _syncTimer = setTimeout(function () {
+            _syncTimer = null;
+            log('row:sync', 'trigger=' + reason);
+            syncRowWithQueue();
+        }, 300);
+    }
+
+    function syncRowWithQueue() {
+        try {
+            var queue = Store.getQueue();
+            var queueIds = {};
+            var i;
+            for (i = 0; i < queue.length; i++) {
+                if (queue[i] && queue[i].card_id != null) queueIds[queue[i].card_id] = queue[i];
+            }
+
+            // Find every DOM card we own across the page. Using attribute
+            // probing (not a class lookup) because cards are clones built
+            // by Lampa's Card class — class names are shared with normal
+            // cards, the marker lives on .card_data.
+            var ourCards = [];
+            $('.card').each(function () {
+                if (this.card_data &&
+                    this.card_data.__last_watched_resume === true &&
+                    !this.card_data.__last_watched_resume_placeholder) {
+                    ourCards.push(this);
+                }
+            });
+            if (!ourCards.length) return;
+
+            var $row = $(ourCards[0]).parent();
+            var dropped = 0;
+
+            // 1) Drop cards no longer in queue (evicted by MAX_QUEUE cap or
+            //    explicit user deletion that happened between boot and now).
+            for (i = 0; i < ourCards.length; i++) {
+                var c = ourCards[i];
+                if (!queueIds[c.card_data.id]) {
+                    $(c).remove();
+                    dropped++;
+                }
+            }
+
+            // 2) Re-index remaining cards.
+            var byId = {};
+            $row.find('.card').each(function () {
+                if (this.card_data &&
+                    this.card_data.__last_watched_resume === true &&
+                    !this.card_data.__last_watched_resume_placeholder) {
+                    byId[this.card_data.id] = this;
+                }
+            });
+
+            // 3) Walk queue in order; .append() moves the matching DOM node
+            //    to the end of the row. After processing all queue entries,
+            //    the row order matches the queue order — most-recent first.
+            var moved = 0;
+            for (i = 0; i < queue.length; i++) {
+                var q = queue[i];
+                if (!q || q.card_id == null) continue;
+                var domCard = byId[q.card_id];
+                if (!domCard) continue;
+                $row.append(domCard);
+                domCard.card_data.__lwr_entry = q;
+                moved++;
+            }
+
+            try { Lampa.Controller.collectionSet($row[0]); } catch (e) {}
+
+            log('row:sync', 'done',
+                'queue.length=' + queue.length,
+                'reordered=' + moved,
+                'dropped=' + dropped);
+        } catch (e) { warn('row:sync', 'fail', e && e.message); }
+    }
+
+    function onCaptureLong(e) {
+        if (!isEnabled()) return;
+        if (MoveMode.active) return; // ignore while reordering — Controller owns input
+        var data = findOurCardData(e.target);
+        if (!data) return;
+        try { e.stopImmediatePropagation(); } catch (ex) {}
+        try { e.preventDefault(); } catch (ex) {}
+        if (data.__last_watched_resume_placeholder) return;
+        var entry = data.__lwr_entry;
+        if (!entry) return;
+        log('long_press', 'card_id=' + entry.card_id);
+        showActionMenu(entry, data, e.target);
+    }
+
+    function bindCaptureHandlers() {
+        if (_captureBound) return;
+        document.body.addEventListener('hover:enter', onCaptureEvent, true);
+        document.body.addEventListener('click',       onCaptureEvent, true);
+        document.body.addEventListener('hover:long',  onCaptureLong,  true);
+        _captureBound = true;
+    }
+
+    // ========================================================================
+    // Resume dispatch — pick path by source.kind
+    // ========================================================================
+
+    function dispatchResume(entry, card) {
+        // Cancel any in-flight auto-click before starting a new one.
+        if (_activeAutoclick && typeof _activeAutoclick.abort === 'function') {
+            try { _activeAutoclick.abort('superseded'); } catch (e) {}
+            _activeAutoclick = null;
+        }
+        if (entry.source.kind === 'online')        dispatchOnlineResume(entry, card);
+        else if (entry.source.kind === 'torrent')  dispatchTorrentResume(entry, card);
+        else                                       dispatchFallbackToFull(entry, card, 'unknown_kind');
+    }
+
+    function dispatchFallbackToFull(entry, card, reason) {
+        log('resume:fallback', 'target=full', 'reason=' + reason, 'card_id=' + entry.card_id);
+        try {
+            var method = 'movie';
+            if (card.name || card.number_of_seasons || card.first_air_date) method = 'tv';
+            if (card.type === 'tv') method = 'tv';
+            Lampa.Activity.push({
+                url:       card.url || '',
+                component: 'full',
+                id:        card.id,
+                method:    method,
+                card:      card,
+                source:    card.source || 'tmdb'
+            });
+        } catch (e) { err('fallback', 'Activity.push fail', e && e.message); }
+    }
+
+    // Specialised fallback for torrent paths: when TorrServer purged the
+    // hash (or our magnet capture missed), there's no point sending the
+    // user back to the card screen — they'd just have to find and click
+    // "Торренты" themselves. Skip a step and open the torrent search
+    // directly. Bonus: a click on any torrent in the list runs through
+    // patchTorrentStart → magnet captured → next resume is instant.
+    function dispatchFallbackToTorrents(entry, card, reason) {
+        log('resume:fallback', 'target=torrents', 'reason=' + reason, 'card_id=' + entry.card_id);
+        try {
+            var year = '';
+            try {
+                var date = card.release_date || card.first_air_date || '';
+                if (date) year = (date + '').slice(0, 4);
+            } catch (ex) {}
+            var title  = card.title || card.name || '';
+            var origin = card.original_title || card.original_name || title;
+            // Mirror the search-string composition of Lampa's standard
+            // Торренты button (full/start/torrents.js:14-24). We use the
+            // 'df_lg' combination — original + title, no year — which is
+            // the most permissive and safest default across torrent sites.
+            Lampa.Activity.push({
+                url:        '',
+                title:      Lampa.Lang.translate('title_torrents'),
+                component:  'torrents',
+                search:     origin + (title && title !== origin ? ' ' + title : ''),
+                search_one: title,
+                search_two: origin,
+                movie:      card,
+                page:       1
+            });
+        } catch (e) {
+            err('fallback', 'torrents Activity.push fail', e && e.message);
+            // Last-resort: card screen.
+            dispatchFallbackToFull(entry, card, 'torrents_push_fail:' + reason);
+        }
+    }
+
+    // ========================================================================
+    // Long-press action menu — our 2 items + Lampa's standard favorite items
+    // ========================================================================
+    //
+    // We can't set Card.onMenuShow per-instance because we don't construct
+    // the cards (ContentRows does). Instead we hijack `hover:long` in
+    // capture phase, replicate Lampa's standard action menu (mirrors the
+    // menu_favorite array in vendor/lampa-source/src/interaction/card.js:361)
+    // and prepend our three items.
+
+    // Deliberate "open card" navigation from the long-press menu. Reuses the
+    // full-screen push the torrent/online fallbacks already share, but logs it
+    // as an explicit user action rather than a resume fallback. Activity.push
+    // installs the 'full' screen's own controller, so — unlike the remove
+    // branch — the caller must NOT toggle the previous controller back.
+    function openCardScreen(entry, data) {
+        log('action:open_card', 'card_id=' + entry.card_id);
+        dispatchFallbackToFull(entry, data, 'menu_open_card');
+    }
+
+    function showActionMenu(entry, data, targetEl) {
+        var enabled = (Lampa.Controller.enabled && Lampa.Controller.enabled() || {}).name;
+        var status  = (Lampa.Favorite && Lampa.Favorite.check) ? Lampa.Favorite.check(data) : {};
+
+        var items = [
+            { title: tr('lwr_open_card'),        lwr_action: 'card' },
+            { title: tr('lwr_remove_from_list'), lwr_action: 'remove' },
+            { title: tr('lwr_move_in_list'),     lwr_action: 'move' },
+            { title: Lampa.Lang.translate('more'),          separator: true },
+            { title: Lampa.Lang.translate('title_book'),    where: 'book',    checkbox: true, checked: !!status.book },
+            { title: Lampa.Lang.translate('title_like'),    where: 'like',    checkbox: true, checked: !!status.like },
+            { title: Lampa.Lang.translate('title_wath'),    where: 'wath',    checkbox: true, checked: !!status.wath },
+            { title: Lampa.Lang.translate('menu_history'),  where: 'history', checkbox: true, checked: !!status.history }
+        ];
+
+        if (window.lampa_settings && window.lampa_settings.account_use) {
+            var marks = ['look', 'viewed', 'scheduled', 'continued', 'thrown'];
+            items.push({ title: Lampa.Lang.translate('settings_cub_status'), separator: true });
+            var i;
+            for (i = 0; i < marks.length; i++) {
+                var m = marks[i];
+                items.push({
+                    title:   Lampa.Lang.translate('title_' + m),
+                    where:   m,
+                    picked:  !!status[m],
+                    collect: true
+                });
+            }
+        }
+
+        Lampa.Select.show({
+            title: Lampa.Lang.translate('title_action'),
+            items: items,
+            onBack: function () {
+                if (enabled) try { Lampa.Controller.toggle(enabled); } catch (e) {}
+            },
+            onCheck: function (a) {
+                if (a.where && Lampa.Favorite && Lampa.Favorite.toggle) {
+                    Lampa.Favorite.toggle(a.where, data);
+                }
+            },
+            onSelect: function (a) {
+                if (a.lwr_action === 'card') {
+                    openCardScreen(entry, data);
+                    return;
+                }
+                if (a.lwr_action === 'remove') {
+                    if (enabled) try { Lampa.Controller.toggle(enabled); } catch (e) {}
+                    handleRemove(entry, data, targetEl);
+                    return;
+                }
+                if (a.lwr_action === 'move') {
+                    MoveMode.enter(entry, data, targetEl, enabled);
+                    return;
+                }
+                if (a.collect && Lampa.Favorite && Lampa.Favorite.toggle) {
+                    Lampa.Favorite.toggle(a.where, data);
+                }
+                if (enabled) try { Lampa.Controller.toggle(enabled); } catch (e) {}
+            }
+        });
+    }
+
+    // ========================================================================
+    // Delete with undo toast
+    // ========================================================================
+
+    function handleRemove(entry, data, targetEl) {
+        var queue = Store.getQueue();
+        var idx = -1;
+        var i;
+        for (i = 0; i < queue.length; i++) {
+            if (queue[i] && queue[i].card_id === entry.card_id) { idx = i; break; }
+        }
+        if (idx === -1) {
+            log('remove', 'noop', 'card_id=' + entry.card_id, 'reason=not_in_queue');
+            return;
+        }
+        var removed = queue[idx];
+        queue.splice(idx, 1);
+        Store.setQueue(queue);
+        log('remove', 'card_id=' + removed.card_id, 'idx=' + idx, 'queue.length=' + queue.length);
+
+        // Detach the card DOM node directly. Lampa.Activity.toggle() does
+        // NOT re-execute ContentRows.call() in 3.1.x, so a row can't be
+        // re-rendered without leaving and re-entering the screen. Detaching
+        // by ourselves both: (a) gives instant visual feedback, and (b)
+        // preserves the bound jQuery handlers so we can re-attach the same
+        // node verbatim if undo fires.
+        var $card = $(targetEl).closest('.card');
+        if (!$card.length) $card = $(targetEl).closest('.selector');
+        var $row     = $card.length ? $card.parent() : null;
+        var $prev    = $card.length ? $card.prev()  : null;
+        var detached = ($card.length && $row && $row.length) ? $card.detach() : null;
+        if (detached) {
+            // Reset focus to nearest sibling so D-pad doesn't strand on a
+            // ghost element. Prefer next neighbour, fall back to previous.
+            try {
+                var $focusTarget = ($prev && $prev.length) ? $prev : ($row.children('.card').first());
+                if ($focusTarget && $focusTarget.length) {
+                    Lampa.Controller.collectionSet($row[0]);
+                    Lampa.Controller.collectionFocus($focusTarget[0], $row[0]);
+                }
+            } catch (e) {}
+        }
+
+        showUndoToast(removed, idx, data, detached, $prev, $row);
+    }
+
+    function showUndoToast(removedEntry, originalIdx, card, detached, $prev, $row) {
+        // Lampa.Noty is just a passive toast — no clickable button. To give
+        // the user a real undo affordance on a TV remote, we show a tiny
+        // Lampa.Select with one item ("Отменить удаление: <title>") and a
+        // 4-second auto-close timer. Pick within 4 s → restore. Let it close
+        // → removal stands.
+        var label = (card && (card.title || card.name)) || ('id ' + removedEntry.card_id);
+        var undone = false;
+
+        var undo = function () {
+            if (undone) return;
+            undone = true;
+            var q = Store.getQueue();
+            var insertAt = Math.min(originalIdx, q.length);
+            q.splice(insertAt, 0, removedEntry);
+            if (q.length > MAX_QUEUE) q = q.slice(0, MAX_QUEUE);
+            Store.setQueue(q);
+            log('remove:undo', 'card_id=' + removedEntry.card_id, 'restored_at=' + insertAt);
+            // Re-attach the original DOM node — keeps focus state and any
+            // Lampa-side handlers (cards bind their own hover/focus during
+            // construction; recreating from scratch loses them).
+            if (detached && $row && $row.length) {
+                try {
+                    if ($prev && $prev.length && $.contains($row[0], $prev[0])) {
+                        $prev.after(detached);
+                    } else {
+                        $row.prepend(detached);
+                    }
+                    Lampa.Controller.collectionSet($row[0]);
+                    Lampa.Controller.collectionFocus(detached[0], $row[0]);
+                } catch (e) { warn('remove:undo', 'reattach fail', e && e.message); }
+            }
+        };
+
+        try { if (Lampa.Noty && Lampa.Noty.show) Lampa.Noty.show(tr('lwr_removed_noty').replace('{title}', label)); }
+        catch (e) {}
+
+        var enabled = (Lampa.Controller.enabled && Lampa.Controller.enabled() || {}).name;
+        var autoClose;
+        try {
+            Lampa.Select.show({
+                title: tr('lwr_removed_noty').replace('{title}', label),
+                items: [{ title: tr('lwr_undo'), lwr_undo: true }],
+                onBack: function () {
+                    if (autoClose) clearTimeout(autoClose);
+                    if (enabled) try { Lampa.Controller.toggle(enabled); } catch (ex) {}
+                },
+                onSelect: function (a) {
+                    if (autoClose) clearTimeout(autoClose);
+                    if (a && a.lwr_undo) undo();
+                    if (enabled) try { Lampa.Controller.toggle(enabled); } catch (ex) {}
+                }
+            });
+            autoClose = setTimeout(function () {
+                try {
+                    if (Lampa.Select && typeof Lampa.Select.close === 'function') Lampa.Select.close();
+                } catch (ex) {}
+                if (enabled) try { Lampa.Controller.toggle(enabled); } catch (ex) {}
+            }, DELETE_UNDO_MS);
+        } catch (e) { warn('remove:undo', 'select fail', e && e.message); }
+    }
+
+    // ========================================================================
+    // Move-mode — left/right reorder via D-pad, OK or Back commits
+    // ========================================================================
+    //
+    // After "Переместить" is selected from the action menu, we install a
+    // private Controller named 'lwr_reorder' that owns input. Each left/right
+    // press swaps the card with its neighbour in BOTH the queue array and
+    // the live DOM, persists immediately to Storage so a crash doesn't lose
+    // progress, and re-focuses the moving card. OK/Back exit move mode
+    // without rolling back — every step is already committed.
+
+    var MoveMode = {
+        active:        false,
+        _entry:        null,
+        _cardEl:       null,
+        _rowEl:        null,
+        _prevController: null,
+
+        enter: function (entry, data, targetEl, prevController) {
+            ensureStyles();
+            if (MoveMode.active) MoveMode.exit('superseded');
+
+            // Resolve the actual card DOM node — targetEl may be a child.
+            var $card = $(targetEl).closest('.card');
+            if (!$card.length) {
+                $card = $(targetEl).closest('.selector');
+            }
+            if (!$card.length) {
+                warn('move:enter', 'no_card_el');
+                if (prevController) try { Lampa.Controller.toggle(prevController); } catch (e) {}
+                return;
+            }
+            var $row = $card.closest('.items-line, .items-cards, .scroll__body');
+            if (!$row.length) {
+                warn('move:enter', 'no_row_el');
+                if (prevController) try { Lampa.Controller.toggle(prevController); } catch (e) {}
+                return;
+            }
+
+            MoveMode.active          = true;
+            MoveMode._entry          = entry;
+            MoveMode._cardEl         = $card[0];
+            MoveMode._rowEl          = $row[0];
+            MoveMode._prevController = prevController || null;
+
+            $card.addClass(REORDER_CLASS);
+            log('move:enter', 'card_id=' + entry.card_id);
+
+            try {
+                Lampa.Controller.add('lwr_reorder', {
+                    invisible: true,
+                    toggle: function () {
+                        Lampa.Controller.collectionSet(MoveMode._rowEl);
+                        Lampa.Controller.collectionFocus(MoveMode._cardEl, MoveMode._rowEl);
+                    },
+                    update: function () {
+                        Lampa.Controller.collectionSet(MoveMode._rowEl);
+                    },
+                    left:  function () { MoveMode.shift(-1); },
+                    right: function () { MoveMode.shift(+1); },
+                    up:    function () { MoveMode.exit('up'); },
+                    down:  function () { MoveMode.exit('down'); },
+                    enter: function () { MoveMode.exit('enter'); },
+                    back:  function () { MoveMode.exit('back'); }
+                });
+                Lampa.Controller.toggle('lwr_reorder');
+            } catch (e) {
+                err('move:enter', 'Controller.toggle fail', e && e.message);
+                MoveMode.exit('controller_fail');
+            }
+        },
+
+        shift: function (delta) {
+            if (!MoveMode.active) return;
+            var queue = Store.getQueue();
+            var idx = -1;
+            var i;
+            for (i = 0; i < queue.length; i++) {
+                if (queue[i] && queue[i].card_id === MoveMode._entry.card_id) { idx = i; break; }
+            }
+            if (idx === -1) return;
+            var newIdx = idx + delta;
+            if (newIdx < 0 || newIdx >= queue.length) {
+                log('move:shift', 'edge', 'delta=' + delta, 'idx=' + idx);
+                return;
+            }
+            var tmp = queue[idx];
+            queue[idx] = queue[newIdx];
+            queue[newIdx] = tmp;
+            Store.setQueue(queue);
+            log('move:shift', 'delta=' + delta, 'from=' + idx, 'to=' + newIdx);
+
+            // Mirror the swap in the live DOM so the card visibly moves
+            // without a full row re-render (which would lose focus).
+            var $card    = $(MoveMode._cardEl);
+            var $sibling = delta < 0 ? $card.prev('.card') : $card.next('.card');
+            if ($sibling.length) {
+                if (delta < 0) $sibling.before($card);
+                else           $sibling.after($card);
+            }
+
+            try {
+                Lampa.Controller.collectionSet(MoveMode._rowEl);
+                Lampa.Controller.collectionFocus(MoveMode._cardEl, MoveMode._rowEl);
+            } catch (e) {}
+        },
+
+        exit: function (reason) {
+            if (!MoveMode.active) return;
+            log('move:exit', 'reason=' + reason);
+            try { $(MoveMode._cardEl).removeClass(REORDER_CLASS); } catch (e) {}
+            var prev = MoveMode._prevController;
+            MoveMode.active          = false;
+            MoveMode._entry          = null;
+            MoveMode._cardEl         = null;
+            MoveMode._rowEl          = null;
+            MoveMode._prevController = null;
+            try {
+                if (prev) Lampa.Controller.toggle(prev);
+                else if (Lampa.Controller && Lampa.Controller.toggle) Lampa.Controller.toggle('content');
+            } catch (e) {}
+        }
+    };
+
+    // ========================================================================
+    // CSS — visual treatment for cards in move-mode
+    // ========================================================================
+
+    function ensureStyles() {
+        if (_stylesInjected) return;
+        _stylesInjected = true;
+        try {
+            var css = '' +
+                '.' + REORDER_CLASS + '{' +
+                    'transform: scale(1.06) rotate(-1.5deg) !important;' +
+                    'box-shadow: 0 0 0 3px #f5c518, 0 12px 28px rgba(245, 197, 24, 0.45);' +
+                    'transition: transform 180ms ease, box-shadow 180ms ease;' +
+                    'z-index: 30;' +
+                    'position: relative;' +
+                '}' +
+                '.' + REORDER_CLASS + ' .card__view{' +
+                    'overflow: visible !important;' +
+                '}';
+            var style = document.createElement('style');
+            style.setAttribute('data-lwr', '1');
+            style.appendChild(document.createTextNode(css));
+            document.head.appendChild(style);
+        } catch (e) { warn('styles', 'inject fail', e && e.message); }
+    }
+
+    // ========================================================================
+    // Online resume — Activity.push to online + DOM MutationObserver
+    // ========================================================================
+
+    function dispatchOnlineResume(entry, card) {
+        log('resume:dispatch', 'target=online',
+            'balanser=' + (entry.source.balanser || '?'),
+            'autoclick=true');
+        try {
+            Lampa.Activity.push({
+                url:        '',
+                title:      Lampa.Lang.translate('title_online'),
+                component:  'online',
+                search:     card.title,
+                search_one: card.title,
+                search_two: card.original_title || card.original_name || card.title,
+                movie:      card,
+                page:       1
+            });
+        } catch (e) {
+            err('resume:online', 'Activity.push fail', e && e.message);
+            return;
+        }
+        OnlineAutoclick.start(entry);
+    }
+
+    var OnlineAutoclick = {
+        _observer: null,
+        _timer:    null,
+        _started:  0,
+
+        start: function (entry) {
+            OnlineAutoclick.abort('restart');
+            OnlineAutoclick._started = Date.now();
+            log('resume:online', 'waiting_dom=true', 'season=' + (entry.season || '-'),
+                'episode=' + (entry.episode || '-'));
+
+            var tryMatch = function () {
+                var $matches = $('.online__item').filter(function () {
+                    return OnlineAutoclick._matches(this, entry);
+                });
+                if ($matches.length) {
+                    OnlineAutoclick._fire($matches.eq(0)[0], 'season_episode');
+                    return true;
+                }
+                return false;
+            };
+
+            // Immediate try in case the list is already rendered (warm cache).
+            if (tryMatch()) return;
+
+            try {
+                OnlineAutoclick._observer = new MutationObserver(function () {
+                    tryMatch();
+                });
+                OnlineAutoclick._observer.observe(document.body, {
+                    childList: true,
+                    subtree:   true
+                });
+            } catch (e) {
+                warn('resume:online', 'MutationObserver fail', e && e.message);
+            }
+
+            OnlineAutoclick._timer = setTimeout(function () {
+                OnlineAutoclick.abort('timeout');
+            }, AUTOCLICK_TIMEOUT_MS);
+            _activeAutoclick = OnlineAutoclick;
+        },
+
+        _matches: function (itemEl, entry) {
+            // Lampa renders online items via online_folder/online templates.
+            // For series items, the title prefix is "S<season> / Серия <ep>".
+            // Parse from the rendered text (more robust than data attributes,
+            // which differ across community balanser plugins).
+            var $it = $(itemEl);
+            var title = ($it.find('.online__title').text() || $it.text() || '').trim();
+            if (!title) return false;
+            if (entry.season && entry.episode) {
+                var sRe = new RegExp('(?:^|[^0-9])S\\s*' + entry.season + '(?:[^0-9]|$)', 'i');
+                var eRe = new RegExp('(?:^|[^0-9])(?:E|Серия|Episode)\\s*' + entry.episode + '(?:[^0-9]|$)', 'i');
+                return sRe.test(title) && eRe.test(title);
+            }
+            // Movie: any rendered item is a candidate; trigger first one.
+            return true;
+        },
+
+        _fire: function (el, matchedBy) {
+            var dt = Date.now() - OnlineAutoclick._started;
+            log('autoclick:hit', 'kind=online', 'dt_ms=' + dt, 'matched=' + matchedBy);
+            OnlineAutoclick.abort('hit');
+            try {
+                var ev = document.createEvent('Event');
+                ev.initEvent('hover:enter', false, true);
+                el.dispatchEvent(ev);
+            } catch (e) {
+                err('autoclick:fire', 'fail', e && e.message);
+            }
+        },
+
+        abort: function (reason) {
+            if (OnlineAutoclick._observer) {
+                try { OnlineAutoclick._observer.disconnect(); } catch (e) {}
+                OnlineAutoclick._observer = null;
+            }
+            if (OnlineAutoclick._timer) {
+                clearTimeout(OnlineAutoclick._timer);
+                OnlineAutoclick._timer = null;
+            }
+            if (reason !== 'hit' && reason !== 'restart' && reason !== 'superseded') {
+                log('autoclick:miss', 'kind=online', 'reason=' + reason);
+            }
+            if (_activeAutoclick === OnlineAutoclick) _activeAutoclick = null;
+        }
+    };
+
+    // ========================================================================
+    // Torrent resume — Lampa.Torrent.open + listener on 'torrent_file'
+    // ========================================================================
+
+    function dispatchTorrentResume(entry, card) {
+        if (!Lampa.Torrent) {
+            err('resume:torrent', 'fail', 'reason=api_missing');
+            dispatchFallbackToTorrents(entry, card, 'torrent_api_missing');
+            return;
+        }
+        var magnet = entry.source.magnet || '';
+        var hash   = entry.source.torrent_hash || '';
+        // Magnet path — call Torrent.start with a synthetic element so Lampa
+        // re-adds the torrent to TorrServer if missing. Falls back to the
+        // hash-only path if no magnet was recorded (legacy queue entries).
+        if (magnet && typeof Lampa.Torrent.start === 'function') {
+            log('resume:dispatch', 'target=torrent', 'mode=start',
+                'magnet=present',
+                'hash=' + hash.slice(0, 8),
+                'autoclick=true');
+            TorrentSafetyNet.arm(entry, card);
+            TorrentAutoclick.start(entry);
+            var element = {
+                MagnetUri: magnet,
+                Link:      magnet,
+                title:     card.title || card.name || '',
+                Title:     card.title || card.name || '',
+                poster:    card.img || card.poster_path || ''
+            };
+            try {
+                Lampa.Torrent.start(element, card);
+            } catch (e) {
+                err('resume:torrent', 'Torrent.start fail', e && e.message);
+                TorrentAutoclick.abort('start_fail');
+                TorrentSafetyNet.disarm();
+                dispatchFallbackToTorrents(entry, card, 'torrent_start_fail');
+            }
+            return;
+        }
+        if (typeof Lampa.Torrent.open !== 'function') {
+            err('resume:torrent', 'fail', 'reason=api_missing');
+            dispatchFallbackToTorrents(entry, card, 'torrent_api_missing');
+            return;
+        }
+        log('resume:dispatch', 'target=torrent', 'mode=open',
+            'magnet=absent',
+            'hash=' + hash.slice(0, 8),
+            'autoclick=true');
+        TorrentSafetyNet.arm(entry, card);
+        TorrentAutoclick.start(entry);
+        try {
+            Lampa.Torrent.open(hash, card);
+        } catch (e) {
+            err('resume:torrent', 'Torrent.open fail', e && e.message);
+            TorrentAutoclick.abort('open_fail');
+            TorrentSafetyNet.disarm();
+            dispatchFallbackToTorrents(entry, card, 'torrent_open_fail');
+        }
+    }
+
+    // Safety net for the torrent path. Lampa polls /torrents every 2 s for up
+    // to 90 s before giving up — too long, and the user is stuck on a spinner.
+    // We listen for request_error on /torrents and bail on the first 404, so
+    // the user goes back to the card screen instead of staring at a spinner.
+    var TorrentSafetyNet = {
+        _armed:           false,
+        _entry:           null,
+        _card:            null,
+        _timer:           null,
+        _consecutive404s: 0,
+        _threshold:       2,  // bail after N consecutive 404s on /torrents
+
+        arm: function (entry, card) {
+            if (TorrentSafetyNet._timer) clearTimeout(TorrentSafetyNet._timer);
+            TorrentSafetyNet._armed           = true;
+            TorrentSafetyNet._entry           = entry;
+            TorrentSafetyNet._card            = card;
+            TorrentSafetyNet._consecutive404s = 0;
+            // Hard upper bound — if no /torrents traffic happens at all
+            // (e.g. TorrServer URL unreachable at the network layer), give
+            // up watching after 30s so we don't strand the user later.
+            TorrentSafetyNet._timer = setTimeout(function () {
+                if (TorrentSafetyNet._armed) {
+                    log('safety_net:expired', 'no_traffic_in_30s');
+                    TorrentSafetyNet.disarm();
+                }
+            }, 30000);
+        },
+
+        disarm: function () {
+            if (TorrentSafetyNet._timer) {
+                clearTimeout(TorrentSafetyNet._timer);
+                TorrentSafetyNet._timer = null;
+            }
+            TorrentSafetyNet._armed           = false;
+            TorrentSafetyNet._entry           = null;
+            TorrentSafetyNet._card            = null;
+            TorrentSafetyNet._consecutive404s = 0;
+        },
+
+        onRequestError: function (e) {
+            if (!TorrentSafetyNet._armed) return;
+            if (!e || !e.params) return;
+            var url = (e.params.url || '') + '';
+            if (url.indexOf('/torrents') === -1) return;
+            var status = 0;
+            try {
+                if (e.error) {
+                    status = parseInt(e.error.status || e.error.code || 0, 10) || 0;
+                }
+            } catch (ex) {}
+            if (status !== 404) return;
+            TorrentSafetyNet._consecutive404s++;
+            if (TorrentSafetyNet._consecutive404s < TorrentSafetyNet._threshold) {
+                // First 404 — could be transient during a fresh torrent
+                // add (TorrServer hasn't indexed the magnet yet). Wait
+                // one more cycle (~2s) before bailing.
+                log('safety_net:404',
+                    'consecutive=' + TorrentSafetyNet._consecutive404s,
+                    'threshold=' + TorrentSafetyNet._threshold,
+                    'waiting');
+                return;
+            }
+            log('safety_net:404', 'aborting torrent resume',
+                'consecutive=' + TorrentSafetyNet._consecutive404s,
+                'card_id=' + (TorrentSafetyNet._entry && TorrentSafetyNet._entry.card_id));
+            var entry = TorrentSafetyNet._entry;
+            var card  = TorrentSafetyNet._card;
+            TorrentSafetyNet.disarm();
+            try { TorrentAutoclick.abort('torrserver_404'); } catch (ex) {}
+            // CRITICAL: Lampa's torrent flow keeps a setInterval polling
+            // /torrents in the closure of interaction/torrent.js — closing
+            // just the Modal doesn't stop it. The interval reads SERVER.hash
+            // on each tick, and once the user opens another torrent the new
+            // hash gets polled by BOTH the old (orphaned) interval AND the
+            // new one. The orphaned interval re-renders the file picker on
+            // every successful response, blinking the UI and stealing focus
+            // to the last episode (Controller.collectionFocus on the last
+            // file with progress, vendor/lampa-source/src/interaction/torrent.js:568).
+            // The clean way to stop it is to trigger the loading modal's
+            // own onBack — that calls Lampa's internal `close()` which
+            // clearIntervals timers.files AND Torserver.clear() AND drops
+            // the orphan SERVER state.
+            try { Lampa.Controller.back(); } catch (ex) {
+                err('safety_net', 'Controller.back fail', ex && ex.message);
+                // Last-resort fallback: at least close the modal UI.
+                try { if (Lampa.Modal && Lampa.Modal.close) Lampa.Modal.close(); } catch (ex2) {}
+            }
+            if (entry && card) dispatchFallbackToTorrents(entry, card, 'torrserver_404');
+        }
+    };
+
+    var TorrentAutoclick = {
+        _handler: null,
+        _timer:   null,
+        _started: 0,
+        _entry:   null,
+
+        start: function (entry) {
+            TorrentAutoclick.abort('restart');
+            TorrentAutoclick._started = Date.now();
+            TorrentAutoclick._entry   = entry;
+            log('resume:torrent', 'waiting_event=torrent_file',
+                'path=' + (entry.source.file_path || '<none>'));
+
+            TorrentAutoclick._handler = function (e) {
+                if (!e || e.type !== 'list_open') return;
+                var items = e.items || [];
+                var i;
+                var matchedIdx = -1;
+                if (entry.source.file_path) {
+                    for (i = 0; i < items.length; i++) {
+                        if (items[i] && items[i].path === entry.source.file_path) { matchedIdx = i; break; }
+                    }
+                }
+                // Fall back to season/episode match if path didn't hit
+                // (release re-encoded, file renamed, but episode preserved).
+                if (matchedIdx === -1 && entry.season && entry.episode) {
+                    for (i = 0; i < items.length; i++) {
+                        if (items[i] && (items[i].season == entry.season) && (items[i].episode == entry.episode)) {
+                            matchedIdx = i;
+                            break;
+                        }
+                    }
+                }
+                if (matchedIdx === -1) {
+                    log('autoclick:miss', 'kind=torrent', 'reason=no_match',
+                        'items=' + items.length);
+                    TorrentAutoclick.abort('no_match');
+                    return;
+                }
+                var matchedBy = (entry.source.file_path && items[matchedIdx].path === entry.source.file_path)
+                                ? 'path' : 'season_episode';
+                TorrentAutoclick._fire(items[matchedIdx], matchedBy);
+            };
+
+            try { Lampa.Listener.follow('torrent_file', TorrentAutoclick._handler); }
+            catch (e) { err('resume:torrent', 'follow fail', e && e.message); }
+
+            TorrentAutoclick._timer = setTimeout(function () {
+                TorrentAutoclick.abort('timeout');
+            }, AUTOCLICK_TIMEOUT_MS);
+            _activeAutoclick = TorrentAutoclick;
+        },
+
+        _fire: function (item, matchedBy) {
+            var dt = Date.now() - TorrentAutoclick._started;
+            // Find the rendered DOM element for this file in the torrent file
+            // picker. Files are rendered into `.torrent-files` (or similar);
+            // walk the modal DOM looking for the element bound to this `item`.
+            var el = TorrentAutoclick._findItemEl(item);
+            if (!el) {
+                log('autoclick:miss', 'kind=torrent', 'reason=dom_not_found');
+                TorrentAutoclick.abort('dom_not_found');
+                return;
+            }
+            log('autoclick:hit', 'kind=torrent', 'dt_ms=' + dt, 'matched=' + matchedBy);
+            TorrentAutoclick.abort('hit');
+            try {
+                var ev = document.createEvent('Event');
+                ev.initEvent('hover:enter', false, true);
+                el.dispatchEvent(ev);
+            } catch (e) {
+                err('autoclick:fire', 'kind=torrent fail', e && e.message);
+            }
+        },
+
+        _findItemEl: function (item) {
+            // Lampa's torrent.js sets `path` on the bound element via Arrays.extend;
+            // the rendered DOM is .torrent-files > .selector with an attached
+            // jQuery-data link to the items array. Easiest stable lookup:
+            // match by visible text containing item.path's basename or full path.
+            var path = item && item.path ? item.path : '';
+            if (!path) return null;
+            var basename = path.split('/').pop();
+            var $candidates = $('.torrent-item, .torrent-files .selector, .selector.torrent-item');
+            var found = null;
+            $candidates.each(function () {
+                var t = ($(this).text() || '').trim();
+                if (t && (t.indexOf(path) >= 0 || t.indexOf(basename) >= 0)) {
+                    found = this;
+                    return false; // break
+                }
+            });
+            return found;
+        },
+
+        abort: function (reason) {
+            if (TorrentAutoclick._handler) {
+                try { Lampa.Listener.remove('torrent_file', TorrentAutoclick._handler); } catch (e) {}
+                TorrentAutoclick._handler = null;
+            }
+            if (TorrentAutoclick._timer) {
+                clearTimeout(TorrentAutoclick._timer);
+                TorrentAutoclick._timer = null;
+            }
+            if (reason !== 'hit' && reason !== 'restart' && reason !== 'superseded' &&
+                reason !== 'no_match' && reason !== 'dom_not_found') {
+                log('autoclick:miss', 'kind=torrent', 'reason=' + reason);
+            }
+            TorrentAutoclick._entry = null;
+            if (_activeAutoclick === TorrentAutoclick) _activeAutoclick = null;
+            // Disarm the safety net only when the autoclick reached a
+            // terminal state. 'restart' and 'superseded' are mid-lifecycle
+            // resets driven by start() or by another dispatch — disarming
+            // here would race with the new arm() that's about to follow.
+            if (reason === 'hit' || reason === 'no_match' ||
+                reason === 'dom_not_found' || reason === 'timeout') {
+                TorrentSafetyNet.disarm();
+            }
+        }
+    };
+
+    // ========================================================================
+    // i18n
+    // ========================================================================
+
+    function tr(key) {
+        try { return Lampa.Lang.translate(key); } catch (e) { return key; }
+    }
+
+    function registerLang() {
+        try {
+            Lampa.Lang.add({
+                lwr_row_title: {
+                    ru: 'Последние просмотры',
+                    en: 'Last watched'
+                },
+                lwr_empty_title: {
+                    ru: 'Тут будут последние просмотры',
+                    en: 'Your recent watches will appear here'
+                },
+                lwr_settings_title: {
+                    ru: 'Продолжить одним кликом',
+                    en: 'Last Watched Resume'
+                },
+                lwr_enabled: {
+                    ru: 'Включить',
+                    en: 'Enable'
+                },
+                lwr_enabled_desc: {
+                    ru: 'Показывать ряд "Последние просмотры" сверху главного экрана',
+                    en: 'Show the "Last watched" row at the top of the main screen'
+                },
+                lwr_clear: {
+                    ru: 'Сбросить запомненное',
+                    en: 'Clear saved'
+                },
+                lwr_clear_desc: {
+                    ru: 'Очистить очередь последних просмотров для текущего профиля',
+                    en: 'Clear the recently-watched queue for the current profile'
+                },
+                lwr_cleared_noty: {
+                    ru: 'Запомненное удалено',
+                    en: 'Saved entries cleared'
+                },
+                lwr_open_card: {
+                    ru: 'Перейти в карточку',
+                    en: 'Open card'
+                },
+                lwr_remove_from_list: {
+                    ru: 'Удалить из списка',
+                    en: 'Remove from list'
+                },
+                lwr_move_in_list: {
+                    ru: 'Переместить',
+                    en: 'Move'
+                },
+                lwr_removed_noty: {
+                    ru: 'Удалено: {title}',
+                    en: 'Removed: {title}'
+                },
+                lwr_undo: {
+                    ru: 'Отменить',
+                    en: 'Undo'
+                }
+            });
+        } catch (e) { err('i18n', 'register fail', e && e.message); }
+    }
+
+    // ========================================================================
+    // Settings
+    // ========================================================================
+
+    function registerSettings() {
+        try {
+            Lampa.SettingsApi.addComponent({
+                component: 'last_watched_resume',
+                name:      tr('lwr_settings_title'),
+                icon: '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+                        '<path d="M8 5V19L19 12L8 5Z" fill="currentColor"/>' +
+                        '<path d="M3 7V17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+                      '</svg>'
+            });
+            Lampa.SettingsApi.addParam({
+                component: 'last_watched_resume',
+                param:     { name: ENABLED_KEY, type: 'trigger', default: true },
+                field:     {
+                    name:        tr('lwr_enabled'),
+                    description: tr('lwr_enabled_desc')
+                },
+                onChange:  function (value) {
+                    log('settings:enabled', 'value=' + value);
+                }
+            });
+            Lampa.SettingsApi.addParam({
+                component: 'last_watched_resume',
+                param:     { name: CLEAR_KEY, type: 'button' },
+                field:     {
+                    name:        tr('lwr_clear'),
+                    description: tr('lwr_clear_desc')
+                },
+                onChange:  function () {
+                    Store.clearQueue();
+                    try {
+                        if (Lampa.Noty && Lampa.Noty.show) {
+                            Lampa.Noty.show(tr('lwr_cleared_noty'));
+                        }
+                    } catch (e) {}
+                    log('settings:cleared');
+                }
+            });
+        } catch (e) { err('settings', 'register fail', e && e.message); }
+    }
+
+    // ========================================================================
+    // Manifest
+    // ========================================================================
+
+    function registerManifest() {
+        try {
+            Lampa.Manifest.plugins = {
+                type:        'video',
+                version:     '0.2.6',
+                name:        'Last Watched Resume',
+                description: 'One-click resume — last 5 watched titles row on the main screen, online + torrent.'
+            };
+        } catch (e) {}
+    }
+
+    // ========================================================================
+    // Init
+    // ========================================================================
+
+    function init() {
+        if (_initialized) return;
+        _initialized = true;
+
+        registerLang();
+        registerManifest();
+        registerSettings();
+        registerRow();
+        ensureStyles();
+
+        // Three-layer recording strategy:
+        //
+        //   1. Player.listener('start' / 'external') — the OBVIOUS path,
+        //      works on most setups, fastest signal. Some Tizen / native-
+        //      player paths bypass it entirely (observed empirically).
+        //
+        //   2. Lampa.Listener('state:changed' target=timeline reason=update) —
+        //      fires from Lampa.Timeline.update which is called by EVERY
+        //      playback path (this is what powers Lampa's own continue-
+        //      watching). Universal but only gives us a hash — we have to
+        //      reverse-lookup the card via pending-context tracking.
+        //
+        //   3. Activity / Torrent.open observers — feed the pending-context
+        //      cache so layer 2 can map hash → (card, source).
+        //
+        // Layer 1 is the fast path; layer 2 is the safety net. Both record
+        // through the same dedup window so we never write twice for one
+        // playback.
+        try { Lampa.Player.listener.follow('start',    function (d) { onPlayerStart(d, 'start'); }); }
+        catch (e) { err('init', "Player.listener.follow('start') fail", e && e.message); }
+        try { Lampa.Player.listener.follow('external', function (d) { onPlayerStart(d, 'external'); }); }
+        catch (e) { err('init', "Player.listener.follow('external') fail", e && e.message); }
+        try { Lampa.Player.listener.follow('destroy',  function () { scheduleRowSync('player_destroy'); }); }
+        catch (e) { err('init', "Player.listener.follow('destroy') fail", e && e.message); }
+
+        try { Lampa.Listener.follow('state:changed', onStateChanged); }
+        catch (e) { err('init', "Listener.follow('state:changed') fail", e && e.message); }
+        try { Lampa.Listener.follow('activity', onActivity); }
+        catch (e) { err('init', "Listener.follow('activity') fail", e && e.message); }
+        try { Lampa.Listener.follow('torrent_file', onTorrentFile); }
+        catch (e) { err('init', "Listener.follow('torrent_file') fail", e && e.message); }
+        try { Lampa.Listener.follow('request_error', TorrentSafetyNet.onRequestError); }
+        catch (e) { err('init', "Listener.follow('request_error') fail", e && e.message); }
+        patchTorrentStart();
+        patchTorrentOpen();
+        patchPlayerPlay();
+
+        // Reconcile-on-boot — pulls in any plays we missed during prior
+        // session because JS was frozen by native player. Runs once per
+        // boot, scans Lampa's own file_view_<profile> + Favorite('history').
+        try { reconcileFromTimeline(); }
+        catch (e) { err('init', 'reconcile fail', e && e.message); }
+
+        bindCaptureHandlers();
+
+        var ver = (Lampa.Manifest && Lampa.Manifest.app_digital) || 'n/a';
+        var pid = Store.profileId();
+        var qlen = Store.getQueue().length;
+        log('init', 'profile=' + (pid || 'local'), 'ver=' + ver, 'queue.length=' + qlen);
+    }
+
+    // ========================================================================
+    // Bootstrap — four-layer pattern (lampa-plugin-development skill)
+    // ========================================================================
+
+    function start() {
+        if (window.Lampa && Lampa.SettingsApi && Lampa.Storage && Lampa.Player &&
+            Lampa.PlayerVideo && Lampa.Listener && Lampa.Lang && Lampa.Utils) {
+            init();
+        } else {
+            setTimeout(start, 500);
+        }
+    }
+
+    if (window.Lampa && Lampa.Listener) {
+        Lampa.Listener.follow('app', function (e) { if (e && e.type === 'ready') start(); });
+        setTimeout(start, 1000);
+    } else {
+        var readyInterval = setInterval(function () {
+            if (window.Lampa && Lampa.Listener) {
+                clearInterval(readyInterval);
+                Lampa.Listener.follow('app', function (e) { if (e && e.type === 'ready') start(); });
+                setTimeout(start, 1000);
+            }
+        }, 300);
+    }
+})();
+
 // ts-preload.js
 ;(function($, Lampa) {
     var Modal = /** @class */function(){
