@@ -9,11 +9,6 @@
 
     // ---------- Получение случайного Free TorrServer ----------
     function fetchRandomServer() {
-        if (Lampa.Manifest.origin !== 'bylampa') {
-            Lampa.Noty.show('Ошибка доступа');
-            return;
-        }
-
         var xhr = new XMLHttpRequest();
         xhr.open('GET', RANDOM_URL, true);
 
