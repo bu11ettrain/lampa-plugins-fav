@@ -8,27 +8,49 @@
     var ICON_SVG = '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="1.3em" height="1.3em"><g><rect x="232.254" y="69.157" style="fill:#718176;" width="42.982" height="377.465"/><polygon style="fill:#718176;" points="56.146,446.588 76.861,489.564 232.234,489.564 232.234,446.588"/><polygon style="fill:#718176;" points="275.21,446.588 275.21,489.564 435.111,489.564 455.826,446.588"/><rect x="232.234" y="446.588" style="fill:#979696;" width="42.977" height="42.977"/><path style="fill:#718176;" d="M511.972,7.837v105.05c0,4.315-3.485,7.8-7.8,7.8H7.8c-4.315,0-7.8-3.485-7.8-7.8V7.837c0-4.315,3.485-7.799,7.8-7.799h496.372C508.487,0.037,511.972,3.522,511.972,7.837z"/><path style="fill:#718176;" d="M511.972,148.318v105.05c0,4.315-3.485,7.883-7.8,7.883H7.8c-4.315,0-7.8-3.568-7.8-7.883v-105.05c0-4.315,3.485-7.8,7.8-7.8h496.372C508.487,140.518,511.972,144.003,511.972,148.318z"/><path style="fill:#718176;" d="M511.972,288.882v105.05c0,4.315-3.485,7.799-7.8,7.799H7.8c-4.315,0-7.8-3.484-7.8-7.799v-105.05c0-4.314,3.485-7.799,7.8-7.799h496.372C508.487,281.082,511.972,284.568,511.972,288.882z"/><circle style="fill:#43B471;" cx="369.338" cy="61.198" r="19.487"/><circle style="fill:#D3D340;" cx="416.663" cy="61.198" r="19.487"/><circle style="fill:#D15075;" cx="463.989" cy="61.198" r="19.487"/></g></svg>';
 
     // ---------- Получение случайного Free TorrServer ----------
+    var network = new Lampa.Reguest();
+
+    function applyServerIp(data) {
+        var ip = (typeof data === 'string' ? data : String(data || '')).trim();
+
+        if (ip.indexOf('{') === 0 || ip.indexOf('[') === 0) {
+            try {
+                var parsed = JSON.parse(ip);
+                ip = (parsed.ip || parsed.host || parsed.url || ip).toString().trim();
+            } catch (e) {}
+        }
+
+        ip = ip.replace(/^https?:\/\//, '').replace(/:\d+$/, '').split('/')[0].trim();
+
+        if (ip && /^[\d.a-zA-Z:-]+$/.test(ip)) {
+            Lampa.Storage.set('torrserver_url_two', 'http://' + ip + ':8090');
+            Lampa.Noty.show('TorrServer изменён: ' + ip);
+            return true;
+        }
+
+        console.error('Некорректный ответ:', data);
+        return false;
+    }
+
     function fetchRandomServer() {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', RANDOM_URL, true);
+        network.clear();
+        network.timeout(1000 * 10);
 
-        xhr.onload = function () {
-            if (xhr.status === 200) {
-                var ip = xhr.responseText.trim();
-                Lampa.Storage.set('torrserver_url_two', 'http://' + ip + ':8090');
-                Lampa.Noty.show('TorrServer изменён');
-            } else {
-                console.error('Ошибка при получении IP-адреса:', xhr.status);
-                Lampa.Noty.show('Ошибка запроса');
-            }
-        };
-
-        xhr.onerror = function () {
-            console.error('Ошибка при получении IP-адреса:', xhr.status);
+        function onError(err) {
+            console.error('Ошибка при получении IP-адреса:', err);
             Lampa.Noty.show('Ошибка запроса');
-        };
+        }
 
-        xhr.send();
+        function onSuccess(data) {
+            if (!applyServerIp(data)) onError(data);
+        }
+
+        // На Android native-стек обходит CORS
+        if (Lampa.Platform.is('android') && typeof network.native === 'function') {
+            network.native(RANDOM_URL, onSuccess, onError, false, { dataType: 'text' });
+        } else {
+            network.silent(RANDOM_URL, onSuccess, onError, false, { dataType: 'text' });
+        }
     }
 
     // ---------- Кнопка смены сервера в шапке ----------
