@@ -1,3 +1,493 @@
+// rating.js
+(function () {
+	'use strict';
+
+	// Default configuration
+	var DEFAULT_CONFIG = {
+		url: 'https://kinopoiskapiunofficial.tech/',
+		rating_url: 'https://rating.kinopoisk.ru/',
+		api_key: '',
+		cache_time: 24 // hours
+	};
+
+	function getConfig() {
+		return {
+			url: Lampa.Storage.get('rating_url', DEFAULT_CONFIG.url),
+			rating_url: Lampa.Storage.get('rating_rating_url', DEFAULT_CONFIG.rating_url),
+			api_key: Lampa.Storage.get('rating_api_key', DEFAULT_CONFIG.api_key),
+			cache_time: Lampa.Storage.get('rating_cache_time', DEFAULT_CONFIG.cache_time) * 60 * 60 * 1000
+		};
+	}
+
+	function initSettings() {
+		// Remove old component if exists
+		try {
+			if (Lampa.SettingsApi.removeComponent) {
+				Lampa.SettingsApi.removeComponent('rating_plugin');
+			}
+		} catch (e) {}
+
+		// Add settings component
+		Lampa.SettingsApi.addComponent({
+			component: 'rating_plugin',
+			name: 'Рейтинг Кинопоиск/IMDB',
+			icon: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" fill="currentColor"/></svg>'
+		});
+
+		// KinoPoisk API URL
+		Lampa.SettingsApi.addParam({
+			component: 'rating_plugin',
+			param: {
+				name: 'rating_url',
+				type: 'input',
+				placeholder: DEFAULT_CONFIG.url,
+				values: Lampa.Storage.get('rating_url', DEFAULT_CONFIG.url),
+				default: DEFAULT_CONFIG.url
+			},
+			field: {
+				name: 'URL для API Кинопоиска',
+				description: 'Базовый URL для API Кинопоиска'
+			},
+			onChange: function(value) {
+				Lampa.Storage.set('rating_url', value || DEFAULT_CONFIG.url);
+			}
+		});
+
+		// Rating URL
+		Lampa.SettingsApi.addParam({
+			component: 'rating_plugin',
+			param: {
+				name: 'rating_rating_url',
+				type: 'input',
+				placeholder: DEFAULT_CONFIG.rating_url,
+				values: Lampa.Storage.get('rating_rating_url', DEFAULT_CONFIG.rating_url),
+				default: DEFAULT_CONFIG.rating_url
+			},
+			field: {
+				name: 'URL для рейтинга',
+				description: 'URL для сервиса rating.kinopoisk.ru'
+			},
+			onChange: function(value) {
+				Lampa.Storage.set('rating_rating_url', value || DEFAULT_CONFIG.rating_url);
+			}
+		});
+
+		// API Key
+		Lampa.SettingsApi.addParam({
+			component: 'rating_plugin',
+			param: {
+				name: 'rating_api_key',
+				type: 'input',
+				placeholder: DEFAULT_CONFIG.api_key,
+				values: Lampa.Storage.get('rating_api_key', DEFAULT_CONFIG.api_key),
+				default: DEFAULT_CONFIG.api_key
+			},
+			field: {
+				name: 'Ключ API',
+				description: 'Зарегистрируйтесь на сайте kinopoiskapiunofficial.tech и введите ваш API-KEY из раздела "Профиль"'
+			},
+			onChange: function(value) {
+				Lampa.Storage.set('rating_api_key', value || DEFAULT_CONFIG.api_key);
+			}
+		});
+
+		// Cache Time
+		Lampa.SettingsApi.addParam({
+			component: 'rating_plugin',
+			param: {
+				name: 'rating_cache_time',
+				type: 'select',
+				values: {
+					'1': '1 час',
+					'6': '6 часов',
+					'12': '12 часов',
+					'24': '24 часа',
+					'48': '48 часов',
+					'72': '72 часа',
+					'168': '1 неделя'
+				},
+				default: DEFAULT_CONFIG.cache_time.toString()
+			},
+			field: {
+				name: 'Время кеширования',
+				description: 'Как долго хранить данные о рейтинге'
+			},
+			onChange: function(value) {
+				Lampa.Storage.set('rating_cache_time', parseInt(value) || DEFAULT_CONFIG.cache_time);
+			}
+		});
+	}
+
+	function getErrorMessageByCode(statusCode) {
+		switch (statusCode) {
+			case 401:
+				return 'Неправильный API ключ. Проверьте настройки плагина.';
+			case 402:
+				return 'Превышен лимит запросов (или дневной, или общий).';
+			case 403:
+				return 'Фильм не найден.';
+			case 429:
+				return 'Слишком много запросов.';
+			default:
+				return null;
+		}
+	}
+
+	function rating_kp_imdb(card) {
+		var network = new Lampa.Reguest();
+		var clean_title = kpCleanTitle(card.title);
+		var search_date = card.release_date || card.first_air_date || card.last_air_date || '0000';
+		var search_year = parseInt((search_date + '').slice(0, 4));
+		var orig = card.original_title || card.original_name;
+		var kp_prox = '';
+
+		var config = getConfig();
+		var params = {
+			id: card.id,
+			url: kp_prox + config.url,
+			rating_url: kp_prox + config.rating_url,
+			headers: {
+				'X-API-KEY': config.api_key
+			},
+			cache_time: config.cache_time
+		};
+		getRating();
+
+		function getRating() {
+			var movieRating = _getCache(params.id);
+			if (movieRating) {
+				return _showRating(movieRating[params.id]);
+			} else {
+				if (config.api_key === '') {
+					showError('Не задан API ключ. Рейтинг получить невозможно, зайдите в настройки плагина.');
+					return;
+				}
+				searchFilm();
+			}
+		}
+
+		function searchFilm() {
+			var url = params.url;
+			var url_by_title = Lampa.Utils.addUrlComponent(url + 'api/v2.1/films/search-by-keyword', 'keyword=' + encodeURIComponent(clean_title));
+			if (card.imdb_id) url = Lampa.Utils.addUrlComponent(url + 'api/v2.2/films', 'imdbId=' + encodeURIComponent(card.imdb_id));
+			else url = url_by_title;
+			network.clear();
+			network.timeout(15000);
+			network.silent(url, function (json) {
+				if (json.items && json.items.length) chooseFilm(json.items);
+				else if (json.films && json.films.length) chooseFilm(json.films);
+				else if (url !== url_by_title) {
+					network.clear();
+					network.timeout(15000);
+					network.silent(url_by_title, function (json) {
+						if (json.items && json.items.length) chooseFilm(json.items);
+						else if (json.films && json.films.length) chooseFilm(json.films);
+						else chooseFilm([]);
+					}, function (a, c) {
+						var customError = getErrorMessageByCode(a.status);
+						var error = customError ? customError : network.errorDecode(a, c);
+						showError(error);
+					}, false, {
+						headers: params.headers
+					});
+				} else chooseFilm([]);
+			}, function (a, c) {
+				var customError = getErrorMessageByCode(a.status);
+				var error = customError ? customError : network.errorDecode(a, c);
+				showError(error);
+			}, false, {
+				headers: params.headers
+			});
+		}
+
+		function chooseFilm(items) {
+			if (items && items.length) {
+				var is_sure = false;
+				var is_imdb = false;
+				items.forEach(function (c) {
+					var year = c.start_date || c.year || '0000';
+					c.tmp_year = parseInt((year + '').slice(0, 4));
+				});
+				if (card.imdb_id) {
+					var tmp = items.filter(function (elem) {
+						return (elem.imdb_id || elem.imdbId) == card.imdb_id;
+					});
+					if (tmp.length) {
+						items = tmp;
+						is_sure = true;
+						is_imdb = true;
+					}
+				}
+				var cards = items;
+				if (cards.length) {
+					if (orig) {
+						var _tmp = cards.filter(function (elem) {
+							return containsTitle(elem.orig_title || elem.nameOriginal, orig) || containsTitle(elem.en_title || elem.nameEn, orig) || containsTitle(elem.title || elem.ru_title || elem.nameRu, orig);
+						});
+						if (_tmp.length) {
+							cards = _tmp;
+							is_sure = true;
+						}
+					}
+					if (card.title) {
+						var _tmp2 = cards.filter(function (elem) {
+							return containsTitle(elem.title || elem.ru_title || elem.nameRu, card.title) || containsTitle(elem.en_title || elem.nameEn, card.title) || containsTitle(elem.orig_title || elem.nameOriginal, card.title);
+						});
+						if (_tmp2.length) {
+							cards = _tmp2;
+							is_sure = true;
+						}
+					}
+					if (cards.length > 1 && search_year) {
+						var _tmp3 = cards.filter(function (c) {
+							return c.tmp_year == search_year;
+						});
+						if (!_tmp3.length) _tmp3 = cards.filter(function (c) {
+							return c.tmp_year && c.tmp_year > search_year - 2 && c.tmp_year < search_year + 2;
+						});
+						if (_tmp3.length) cards = _tmp3;
+					}
+				}
+				if (cards.length == 1 && is_sure && !is_imdb) {
+					if (search_year && cards[0].tmp_year) {
+						is_sure = cards[0].tmp_year > search_year - 2 && cards[0].tmp_year < search_year + 2;
+					}
+					if (is_sure) {
+						is_sure = false;
+						if (orig) {
+							is_sure |= equalTitle(cards[0].orig_title || cards[0].nameOriginal, orig) || equalTitle(cards[0].en_title || cards[0].nameEn, orig) || equalTitle(cards[0].title || cards[0].ru_title || cards[0].nameRu, orig);
+						}
+						if (card.title) {
+							is_sure |= equalTitle(cards[0].title || cards[0].ru_title || cards[0].nameRu, card.title) || equalTitle(cards[0].en_title || cards[0].nameEn, card.title) || equalTitle(cards[0].orig_title || cards[0].nameOriginal, card.title);
+						}
+					}
+				}
+				if (cards.length == 1 && is_sure) {
+					var id = cards[0].kp_id || cards[0].kinopoisk_id || cards[0].kinopoiskId || cards[0].filmId;
+					var base_search = function base_search() {
+						network.clear();
+						network.timeout(15000);
+						network.silent(params.url + 'api/v2.2/films/' + id, function (data) {
+							var movieRating = _setCache(params.id, {
+								kp: data.ratingKinopoisk,
+								imdb: data.ratingImdb,
+								timestamp: new Date().getTime()
+							}); // Кешируем данные
+							return _showRating(movieRating);
+						}, function (a, c) {
+							var customError = getErrorMessageByCode(a.status);
+							var error = customError ? customError : network.errorDecode(a, c);
+							showError(error);
+						}, false, {
+							headers: params.headers
+						});
+					};
+					network.clear();
+					network.timeout(5000);
+					network["native"](params.rating_url + id + '.xml', function (str) {
+						if (str.indexOf('<rating>') >= 0) {
+							try {
+								var ratingKinopoisk = 0;
+								var ratingImdb = 0;
+								var xml = $($.parseXML(str));
+								var kp_rating = xml.find('kp_rating');
+								if (kp_rating.length) {
+									ratingKinopoisk = parseFloat(kp_rating.text());
+								}
+								var imdb_rating = xml.find('imdb_rating');
+								if (imdb_rating.length) {
+									ratingImdb = parseFloat(imdb_rating.text());
+								}
+								var movieRating = _setCache(params.id, {
+									kp: ratingKinopoisk,
+									imdb: ratingImdb,
+									timestamp: new Date().getTime()
+								}); // Кешируем данные
+								return _showRating(movieRating);
+							} catch (ex) {
+							}
+						}
+						base_search();
+					}, function (a, c) {
+						base_search();
+					}, false, {
+						dataType: 'text'
+					});
+				} else {
+					var movieRating = _setCache(params.id, {
+						kp: 0,
+						imdb: 0,
+						timestamp: new Date().getTime()
+					}); // Кешируем данные
+					return _showRating(movieRating);
+				}
+			} else {
+				var _movieRating = _setCache(params.id, {
+					kp: 0,
+					imdb: 0,
+					timestamp: new Date().getTime()
+				}); // Кешируем данные
+				return _showRating(_movieRating);
+			}
+		}
+
+		function cleanTitle(str){
+			return str.replace(/[\s.,:;’'`!?]+/g, ' ').trim();
+		}
+
+		function kpCleanTitle(str){
+			return cleanTitle(str).replace(/^[ \/\\]+/, '').replace(/[ \/\\]+$/, '').replace(/\+( *[+\/\\])+/g, '+').replace(/([+\/\\] *)+\+/g, '+').replace(/( *[\/\\]+ *)+/g, '+');
+		}
+
+		function normalizeTitle(str){
+			return cleanTitle(str.toLowerCase().replace(/[\-\u2010-\u2015\u2E3A\u2E3B\uFE58\uFE63\uFF0D]+/g, '-').replace(/ё/g, 'е'));
+		}
+
+		function equalTitle(t1, t2){
+			return typeof t1 === 'string' && typeof t2 === 'string' && normalizeTitle(t1) === normalizeTitle(t2);
+		}
+
+		function containsTitle(str, title){
+			return typeof str === 'string' && typeof title === 'string' && normalizeTitle(str).indexOf(normalizeTitle(title)) !== -1;
+		}
+
+		function showError(error) {
+			Lampa.Noty.show('Рейтинг KP: ' + error);
+		}
+
+		function _getCache(movie) {
+			var timestamp = new Date().getTime();
+			var cache = Lampa.Storage.cache('kp_rating', 500, {}); //500 это лимит ключей
+			if (cache[movie]) {
+				if ((timestamp - cache[movie].timestamp) > params.cache_time) {
+					// Если кеш истёк, чистим его
+					delete cache[movie];
+					Lampa.Storage.set('kp_rating', cache);
+					return false;
+				}
+			} else return false;
+			return cache;
+		}
+
+		function _setCache(movie, data) {
+			var timestamp = new Date().getTime();
+			var cache = Lampa.Storage.cache('kp_rating', 500, {}); //500 это лимит ключей
+			if (!cache[movie]) {
+				cache[movie] = data;
+				Lampa.Storage.set('kp_rating', cache);
+			} else {
+				if ((timestamp - cache[movie].timestamp) > params.cache_time) {
+					data.timestamp = timestamp;
+					cache[movie] = data;
+					Lampa.Storage.set('kp_rating', cache);
+				} else data = cache[movie];
+			}
+			return data;
+		}
+
+		function _showRating(data) {
+			if (data) {
+				var kp_rating = !isNaN(data.kp) && data.kp !== null ? parseFloat(data.kp).toFixed(1) : '0.0';
+				var imdb_rating = !isNaN(data.imdb) && data.imdb !== null ? parseFloat(data.imdb).toFixed(1) : '0.0';
+				var render = Lampa.Activity.active().activity.render();
+				$('.wait_rating', render).remove();
+				$('.rate--imdb', render).removeClass('hide').find('> div').eq(0).text(imdb_rating);
+				$('.rate--kp', render).removeClass('hide').find('> div').eq(0).text(kp_rating);
+			}
+		}
+	}
+
+	function startPlugin() {
+		window.rating_plugin = true;
+		// Анонимная аналитика без куков и без передачи личных данных (goatcounter.com)
+		new Image().src = 'https://amiv1.goatcounter.com/count?p=/rating';
+
+		initSettings();
+
+		Lampa.Listener.follow('full', function (e) {
+			if (e.type == 'complite') {
+				var render = e.object.activity.render();
+				if ($('.rate--kp', render).hasClass('hide') && !$('.wait_rating', render).length) {
+					$('.info__rate', render).after('<div style="width:2em;margin-top:1em;margin-right:1em" class="wait_rating"><div class="broadcast__scan"><div></div></div><div>');
+					rating_kp_imdb(e.data.movie);
+				}
+			}
+		});
+	}
+	if (!window.rating_plugin) startPlugin();
+})();
+
+// tizen_remote_control.js
+(function () {
+    'use strict';
+
+    function startPlugin() {
+        if (window.tizen_remote_control_plugin) return;
+        window.tizen_remote_control_plugin = true;
+
+        // Анонимная аналитика без куков и без передачи личных данных (goatcounter.com)
+        new Image().src = 'https://amiv1.goatcounter.com/count?p=/tizen-remote-control';
+
+        if (typeof tizen === 'undefined') {
+            // Not a Tizen device
+            return;
+        }
+
+        // https://developer.samsung.com/smarttv/develop/guides/user-interaction/remote-control.html
+        tizen.tvinputdevice.registerKey('MediaPlayPause');
+        tizen.tvinputdevice.registerKey('ChannelUp');
+        tizen.tvinputdevice.registerKey('ChannelDown');
+        tizen.tvinputdevice.registerKey('ChannelList');
+        tizen.tvinputdevice.registerKey('MediaTrackNext');
+        tizen.tvinputdevice.registerKey('MediaTrackPrevious');
+
+        document.addEventListener("keydown", (event) => {
+            if (!Lampa.Player.opened()) {
+                return;
+            }
+            switch (event.keyCode) {
+                case tizen.tvinputdevice.getKey('MediaPlayPause').code:
+                    event.preventDefault();
+                    Lampa.PlayerVideo.playpause();
+                    break;
+                case tizen.tvinputdevice.getKey('ChannelUp').code:
+                case tizen.tvinputdevice.getKey('MediaTrackNext').code:
+                    event.preventDefault();
+                    if (Lampa.PlayerIPTV.playning()) {
+                        Lampa.PlayerIPTV.nextChannel();
+                    } else {
+                        Lampa.PlayerPlaylist.next();
+                    }
+                    break;
+                case tizen.tvinputdevice.getKey('ChannelDown').code:
+                case tizen.tvinputdevice.getKey('MediaTrackPrevious').code:
+                    event.preventDefault();
+                    if (Lampa.PlayerIPTV.playning()) {
+                        Lampa.PlayerIPTV.prevChannel();
+                    } else {
+                        Lampa.PlayerPlaylist.prev();
+                    }
+                    break;
+                case tizen.tvinputdevice.getKey('ChannelList').code:
+                    event.preventDefault();
+                    Lampa.PlayerPlaylist.show();
+                    break;
+            }
+        });
+    }
+
+    if (window.appready) {
+        startPlugin();
+    } else {
+        Lampa.Listener.follow('app', function (e) {
+            if (e.type === 'ready') {
+                startPlugin();
+            }
+        });
+    }
+
+})();
+
 // notrailer.js
 (function () {
     'use strict';	
@@ -275,123 +765,6 @@
     } else {
         Lampa.Listener.follow('app', function (e) {
             if (e.type === 'ready') startPlugin();
-        });
-    }
-})();
-
-// redirecct.js 
-(function () {
-    'use strict';
-
-    Lampa.Platform.tv();
-
-    var server_protocol = location.protocol === 'https:' ? 'https://' : 'http://';
-
-    var icon_server_redirect =
-        '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
-        '<path d="M13 21.75c.414 0 .75-.336.75-.75s-.336-.75-.75-.75v1.5zM3.172 19.828l.53-.53h0l-.53.53zM20.828 4.172l-.53.53v0l.53-.53zM21.25 13c0 .414.336.75.75.75s.75-.336.75-.75h-1.5zM10 3.75h4V2.25h-4v1.5zM2.75 13v-1H1.25v1h1.5zM2.75 12v-1H1.25v1h1.5zM13 20.25h-3v1.5h3v-1.5zM21.25 11v1h1.5v-1h-1.5zM1.25 13c0 1.864-.002 3.338.153 4.489.158 1.172.49 2.121 1.238 2.87l1.061-1.061c-.423-.423-.677-1.003-.812-2.009C2.752 16.262 2.75 14.907 2.75 13h-1.5zM10 20.25c-1.907 0-3.261-.002-4.289-.14-1.006-.135-1.586-.389-2.009-.812l-1.061 1.061c.748.748 1.697 1.08 2.87 1.238C6.662 21.752 8.136 21.75 10 21.75v-1.5zM14 3.75c1.907 0 3.261.002 4.289.14 1.006.135 1.586.389 2.009.812l1.061-1.061c-.748-.748-1.697-1.08-2.87-1.238C17.338 2.248 15.864 2.25 14 2.25v1.5zM22.75 11c0-1.864.002-3.338-.153-4.489-.158-1.172-.49-2.121-1.238-2.87l-1.061 1.061c.423.423.677 1.003.812 2.009.138 1.028.14 2.382.14 4.289h1.5zM10 2.25C8.136 2.25 6.662 2.248 5.511 2.403 4.339 2.561 3.39 2.893 2.641 3.641l1.061 1.061c.423-.423 1.003-.677 2.009-.812C6.739 3.752 8.093 3.75 10 3.75V2.25zM2.75 11c0-1.907.002-3.261.14-4.289.135-1.006.389-1.586.812-2.009L2.641 3.641C1.893 4.39 1.561 5.339 1.403 6.511 1.248 7.662 1.25 9.136 1.25 11h1.5zM2 12.75h20v-1.5H2v1.5zM21.25 12v1h1.5v-1h-1.5z" fill="currentColor"/>' +
-        '<path d="M13.5 7.5h4.5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>' +
-        '</svg>';
-
-    var settingsAdded = false;
-    var keypadBound = false;
-
-    function updateButton() {
-        $('#REDIRECT').remove();
-
-        var server = Lampa.Storage.get('location_server', '');
-        if (!server) return;
-
-        var btn =
-            '<div id="REDIRECT" class="head__action selector redirect-screen">' +
-            icon_server_redirect +
-            '</div>';
-
-        $('#app > div.head > div > div.head__actions').append(btn);
-        $('#REDIRECT').insertAfter('div.head__action.selector.open--settings');
-
-        $('#REDIRECT').on('hover:enter hover:click hover:touch', function () {
-            window.location.href = server_protocol + Lampa.Storage.get('location_server', '');
-        });
-    }
-
-    function addSettings() {
-        if (settingsAdded) return;
-        settingsAdded = true;
-
-        Lampa.SettingsApi.addComponent({
-            component: 'location_redirect',
-            name: 'Смена сервера',
-            icon: icon_server_redirect
-        });
-
-        Lampa.SettingsApi.addParam({
-            component: 'location_redirect',
-            param: {
-                name: 'location_server',
-                type: 'input',
-                values: '',
-                placeholder: 'Например: bylampa.online',
-                default: ''
-            },
-            field: {
-                name: 'Адрес сервера',
-                description: 'Без http:// — только домен. Кнопка появится в верхнем баре'
-            },
-            onChange: function (value) {
-                updateButton();
-            }
-        });
-
-        Lampa.SettingsApi.addParam({
-            component: 'location_redirect',
-            param: {
-                name: 'const_redirect',
-                type: 'trigger',
-                default: false
-            },
-            field: {
-                name: 'Постоянный редирект',
-                description: 'Чтобы отключить — зажмите ВНИЗ при загрузке приложения'
-            }
-        });
-    }
-
-    function bindKeypad() {
-        if (keypadBound) return;
-        keypadBound = true;
-
-        Lampa.Keypad.listener.follow('keydown', function (e) {
-            // 40 = Down, 29461 = Down на некоторых пультах
-            if (e.code === 40 || e.code === 29461) {
-                Lampa.Storage.set('const_redirect', false);
-            }
-        });
-    }
-
-    function tryConstRedirect() {
-        setTimeout(function () {
-            if (Lampa.Storage.field('const_redirect') === true) {
-                var server = Lampa.Storage.get('location_server', '');
-                if (server) {
-                    window.location.href = server_protocol + server;
-                }
-            }
-        }, 300);
-    }
-
-    function startMe() {
-        addSettings();
-        bindKeypad();
-        updateButton();
-        tryConstRedirect();
-    }
-
-    if (window.appready) {
-        startMe();
-    } else {
-        Lampa.Listener.follow('app', function (e) {
-            if (e.type === 'ready') startMe();
         });
     }
 })();
