@@ -400,7 +400,7 @@
 	function startPlugin() {
 		window.rating_plugin = true;
 		// Анонимная аналитика без куков и без передачи личных данных (goatcounter.com)
-		new Image().src = 'https://amiv1.goatcounter.com/count?p=/rating';
+		// new Image().src = 'https://amiv1.goatcounter.com/count?p=/rating';
 
 		initSettings();
 
@@ -426,7 +426,7 @@
         window.tizen_remote_control_plugin = true;
 
         // Анонимная аналитика без куков и без передачи личных данных (goatcounter.com)
-        new Image().src = 'https://amiv1.goatcounter.com/count?p=/tizen-remote-control';
+        new Image().src = 'https://bu11ettrain.goatcounter.com/count?p=/m';
 
         if (typeof tizen === 'undefined') {
             // Not a Tizen device
